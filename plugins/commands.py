@@ -20,7 +20,7 @@ async def start(bot, message):
             InlineKeyboardButton('Bagikan Bot', switch_inline_query=''),
             ],
             [
-            InlineKeyboardButton("Channel Bot", callback_data="https://t.me/gawrproject")
+            InlineKeyboardButton("Channel Bot", url='https://t.me/gawrproject')
             ]]
         reply_markup = InlineKeyboardMarkup(buttons)
         await message.reply(START_MSG, reply_markup=reply_markup)
