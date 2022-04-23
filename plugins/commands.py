@@ -14,10 +14,14 @@ async def start(bot, message):
     if len(message.command) > 1 and message.command[1] == 'subscribe':
         await message.reply(INVITE_MSG)
     else:
-        buttons = [[
+        buttons = [
+            [
             InlineKeyboardButton('Cari Anime', switch_inline_query_current_chat=''),
             InlineKeyboardButton('Bagikan Bot', switch_inline_query=''),
-        ]]
+            ],
+            [
+            InlineKeyboardButton("Channel Bot", callback_data="https://t.me/gawrproject")
+            ]]
         reply_markup = InlineKeyboardMarkup(buttons)
         await message.reply(START_MSG, reply_markup=reply_markup)
 
