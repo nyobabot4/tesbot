@@ -20,8 +20,9 @@ async def start(bot, message):
             InlineKeyboardButton('🔗 Bagikan Bot', switch_inline_query=''),
             ],
             [
-            InlineKeyboardButton("❓ Cara Pakai Botnya", url='help')
-            ]]
+            InlineKeyboardButton("❓ Cara Pakai Botnya",  callback_data="help"),
+            ],
+          ]
         reply_markup = InlineKeyboardMarkup(buttons)
         await message.reply(START_MSG.format(message.from_user.mention), reply_markup=reply_markup)
 
