@@ -79,8 +79,11 @@ def get_reply_markup(username, query):
     url = 't.me/share/url?url=' + quote(SHARE_BUTTON_TEXT.format(username=username))
     buttons = [
         [
-            InlineKeyboardButton('Cari Anime', switch_inline_query_current_chat=query),
+            InlineKeyboardButton('Cari Lagi', switch_inline_query_current_chat=query),
             InlineKeyboardButton('Bagikan Bot', url=url),
+        ],
+        [
+           InlineKeyboardButton("Channel Bot", callback_data="https://t.me/gawrproject")
         ]
     ]
     return InlineKeyboardMarkup(buttons)
