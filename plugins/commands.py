@@ -20,7 +20,7 @@ async def start(bot, message):
             InlineKeyboardButton('🔗 Bagikan Bot', switch_inline_query=''),
             ],
             [
-            InlineKeyboardButton("❓ Cara Pakai Botnya", callback_data="help"),
+            InlineKeyboardButton("🗣 Channel Bot", url='https://t.me/gawrproject'),
             ],
           ]
         reply_markup = InlineKeyboardMarkup(buttons)
@@ -112,5 +112,5 @@ async def bot_info(bot, message):
             InlineKeyboardButton('Request Anime', url='https://gawr.floral.workers.dev/#contact'),
         ]
         ]
-    await message.reply(text="<b>Cara Pencarian:.</b>\n\n➤ Gunakan kata kunci untuk mempermudah pencarian: kata kunci [search query]. Contoh: GP eyes.\n\n➤ kata kunci: Gawrproject, GP, kusonime, kuso, wibudesu, animebatch, himitsukaze, moenime, dll.\n\n<b>Catatan:</b> Kalian bisa menekan tombol di bawah jika kalian menemukan bug atau mau request anime.", reply_markup=InlineKeyboardMarkup(buttons), disable_web_page_preview=True)
+    await message.reply(text="<b>Cara Pencarian:</b>\n\n➤ Gunakan kata kunci untuk mempermudah pencarian: kata kunci [search query]. Contoh: GP eyes.\n\n➤ kata kunci: Gawrproject, GP, kusonime, kuso, wibudesu, animebatch, himitsukaze, moenime, dll.\n\n<b>Catatan:</b> Kalian bisa menekan tombol di bawah jika kalian menemukan bug atau mau request anime.", reply_markup=InlineKeyboardMarkup(buttons), disable_web_page_preview=True)
 
