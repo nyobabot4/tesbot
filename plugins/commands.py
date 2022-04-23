@@ -17,10 +17,10 @@ async def start(bot, message):
         buttons = [
             [
             InlineKeyboardButton('🔎 Cari Anime', switch_inline_query_current_chat=''),
-            InlineKeyboardButton('Bagikan Bot 🔗', switch_inline_query=''),
+            InlineKeyboardButton('🔗 Bagikan Bot', switch_inline_query=''),
             ],
             [
-            InlineKeyboardButton("Channel Bot 🗣", url='https://t.me/gawrproject')
+            InlineKeyboardButton("❓ Cara Pakai Botnya", url='help')
             ]]
         reply_markup = InlineKeyboardMarkup(buttons)
         await message.reply(START_MSG.format(message.from_user.mention), reply_markup=reply_markup)
@@ -101,4 +101,15 @@ async def delete(bot, message):
     if result.deleted_count:
         await msg.edit('File is successfully deleted from database')
     else:
-        await msg.edit('File not found in database')
+        await msg.edit('File not found in database')     
+        
+@Client.on_message(filters.command('help'))
+async def bot_info(bot, message):
+    buttons = [
+        [
+            InlineKeyboardButton('Owner Bot', url='https://t.me/Rahmanaja009'),
+            InlineKeyboardButton('Request Anime', url='https://gawr.floral.workers.dev/#contact'),
+        ]
+        ]
+    await message.reply(text="<b>Cara Pencarian</b>/n/n➤ Gunakan kata kunci untuk mempermudah pencarian: kata kunci [search query]. Contoh: GP eyes/n/n➤ kata kunci: Gawrproject, GP, kusonime, kuso, wibudesu, animebatch, himitsukaze, moenime, dll./n/n➤ Kalian bisa hubungi owner jika ada kendala dengan bot atau request anime dengan menekan tombol di bawah.", reply_markup=InlineKeyboardMarkup(buttons), disable_web_page_preview=True)
+
