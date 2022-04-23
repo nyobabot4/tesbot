@@ -83,7 +83,7 @@ def get_reply_markup(username, query):
             InlineKeyboardButton('Bagikan Bot 🔗', url=url),
         ],
         [
-           InlineKeyboardButton("Cara Pakai Botnya", callback_data="help")
+           InlineKeyboardButton("Channel Bot 🗣", url='https://t.me/gawrproject')
         ]
     ]
     return InlineKeyboardMarkup(buttons)
