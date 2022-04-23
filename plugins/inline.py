@@ -80,10 +80,11 @@ def get_reply_markup(username, query):
     buttons = [
         [
             InlineKeyboardButton('🔎 Cari Lagi', switch_inline_query_current_chat=query),
+            InlineKeyboardButton('🔗 Bagikan Bot', switch_inline_query=''),
         ],
         [
-           InlineKeyboardButton("🗣 Kanal Pembaharuan", url='https://t.me/gawrproject'),
-        ]
+           InlineKeyboardButton("🗣 Channel Bot", url='https://t.me/gawrproject'),
+        ],
     ]
     return InlineKeyboardMarkup(buttons)
 
