@@ -20,7 +20,7 @@ async def answer(bot, query):
         await query.answer(
             results=[],
             cache_time=0,
-            switch_pm_text='You have to subscribe channel',
+            switch_pm_text='Hub admin. Ente tidak punya akses...',
             switch_pm_parameter="subscribe",
         )
         return
@@ -50,9 +50,9 @@ async def answer(bot, query):
         )
 
     if results:
-        switch_pm_text = f"{emoji.FILE_FOLDER} Results"
+        switch_pm_text = f"{emoji.FILE_FOLDER} Database"
         if text:
-            switch_pm_text += f" for {text}"
+            switch_pm_text = f"🔎 Hasil Pencarian Untuk {text}"
 
         await query.answer(
             results=results,
@@ -63,9 +63,9 @@ async def answer(bot, query):
         )
     else:
 
-        switch_pm_text = f'{emoji.CROSS_MARK} No results'
+        switch_pm_text = f'{emoji.CROSS_MARK} Pencarian Tidak Ditemukan'
         if text:
-            switch_pm_text += f' for "{text}"'
+            switch_pm_text += f' Untuk "{text}"'
 
         await query.answer(
             results=[],
@@ -79,7 +79,7 @@ def get_reply_markup(username, query):
     url = 't.me/share/url?url=' + quote(SHARE_BUTTON_TEXT.format(username=username))
     buttons = [
         [
-            InlineKeyboardButton('🔗 Bagikan Bot', switch_inline_query=''),
+            InlineKeyboardButton('🔗 Bagikan Bot', url=url),
         ],
     ]
     return InlineKeyboardMarkup(buttons)
