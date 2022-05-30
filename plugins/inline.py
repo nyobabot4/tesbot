@@ -20,7 +20,7 @@ async def answer(bot, query):
         await query.answer(
             results=[],
             cache_time=0,
-            switch_pm_text='Hub admin. Ente tidak punya akses...',
+            switch_pm_text='Sorry, ente tidak punya akses...',
             switch_pm_parameter="subscribe",
         )
         return
