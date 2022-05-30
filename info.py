@@ -36,5 +36,5 @@ Here you can search files in inline mode. Just press following buttons and start
 """
 
 START_MSG = environ.get('START_MSG', default_start_msg)
-SHARE_BUTTON_TEXT = 'Buka bot {username} untuk mencari anime subtitle indonesia'
+SHARE_BUTTON_TEXT = environ.get('SHARE_MSG', 'Bot buat have fun {username}\n\nHub @zxcxzcx untuk mendapatkan akses...')
 INVITE_MSG = environ.get('INVITE_MSG', 'Please join @.... to use this bot')
