@@ -13,8 +13,6 @@ async def start(bot, message):
     """Start command handler"""
     if len(message.command) > 1 and message.command[1] == 'subscribe':
         await message.reply(INVITE_MSG.format(message.from_user.mention))
-    else:
-        await message.reply(START_MSG.format(message.from_user.mention))
 
 
 @Client.on_message(filters.command('channel') & filters.user(ADMINS))
