@@ -1,404 +1,206 @@
-// --- Konfigurasi (Ganti Nilai-Nilai Ini) ---
-var token = "7849305390:AAFQKbXtkii-fp_KvBW0loO_du2_09vpNEo";          // Token bot dari BotFather
-const adminBot = 2109541199;            // ID Telegram Anda
-const channelIds = [-1001314857941, -1001656226794, -1001765650465]; // Daftar ID channel
-const spreadsheetId = "10TupgRfroPas2SjNNY19Q4uB82AYGUVwIIisBxb9Mgg";  // ID spreadsheet
+// --- Konfigurasi ---
+var token = "7849305390:AAHTEPmbFVwk--omKJsTP4H5j6Xv18SGQU0";          // Ganti dengan token bot Anda
+const adminBot = 2109541199;        // Ganti dengan ID Telegram Anda
+const spreadsheetId = "10TupgRfroPas2SjNNY19Q4uB82AYGUVwIIisBxb9Mgg"; // Ganti dengan ID Google Sheet Anda
+const debug = false;
 
-// --- Konstanta (Jangan Diubah Kecuali Anda Tahu Apa yang Anda Lakukan) ---
-const DEBUG = false; // Set ke true untuk debugging
-const CACHE_TIME = 300; // Waktu cache dalam detik (5 menit)
-const SHEET_DATA_NAME = "Sheet1"; // Nama sheet untuk data pesan
-const SHEET_CHANNEL_NAME = "SheetChannel"; //Nama sheet untuk channel (optional)
+// --- Inisialisasi Library Telegram ---
+const tg = new telegram.daftar(token);
 
-// --- Fungsi Utama (doPost - Webhook) ---
+// --- Fungsi Telegram (Tidak Berubah) ---
+function getMe() { let me = tg.getMe(); return Logger.log(me); }
+function setWebhook() { var url = "yourwebhooklink"; var r = tg.setWebhook(url); return Logger.log(r); }
+function getWebhookInfo() { let hasil = tg.getWebhookInfo(); return Logger.log(hasil); }
+function deleteWebhook() { let hasil = tg.deleteWebhook(); return Logger.log(hasil); }
 
+// --- Fungsi doPost (Entry Point) ---
 function doPost(e) {
-    try {
-        if (!e || !e.postData || !e.postData.contents) {
-            return;
-        }
+    if (debug) { tg.sendMessage(adminBot, JSON.stringify(e, null, 2)); }
+    let update = JSON.parse(e.postData.contents);
 
-        var update = JSON.parse(e.postData.contents);
+    if (update.inline_query) { handleInlineQuery(update.inline_query); }
+    else if (update.message) { handleMessage(update.message); }
+    else if (update.callback_query) { handleCallbackQuery(update.callback_query); }
+    else if (update.chosen_inline_result) { handleChosenInlineResult(update.chosen_inline_result); }
+}
 
-        if (DEBUG) {
-            sendText(adminBot, JSON.stringify(update, null, 2));
-        }
+// --- Handler Pesan ---
+function handleMessage(message) {
+    let chatId = message.chat.id;
+    let text = message.text;
+    let user = message.from;
 
-        //Handle command
-        if (update.message && update.message.text && update.message.text.startsWith("/")) {
-            handleCommand(update.message);
-            return;
-        }
-
-
-        // Periksa status bot (aktif atau tidak)
-        var botStatus = PropertiesService.getScriptProperties().getProperty('bot_status');
-        if (botStatus === 'stopped') {
-           return; // Jika bot dihentikan, jangan proses apa pun
-        }
-
-        //Handle channel post
-        if (update.channel_post && channelIds.includes(update.channel_post.chat.id)) {
-            saveData(update.channel_post);
-            return;
-        }
-
-      //Handle pesan
-        if(update.message && channelIds.includes(update.message.chat.id)){
-            saveData(update.message);
-            return;
-        }
-
-      //Handle inline query
-        if (update.inline_query) {
-            handleInlineQuery(update.inline_query);
-            return;
-        }
-
-
-    } catch (error) {
-        Logger.log("Error di doPost:", error);
-        sendText(adminBot, "Error: " + error);
+    if (text === "/start") { sendStartMessage(chatId, user); }
+    else if (text === "/ping") { tg.sendMessage(chatId, "Pong!"); }
+    else if (message.document) { processDocument(message); } // Proses dokumen
+    // Tambahkan handler untuk forward (opsional)
+    else if (message.forward_from || message.forward_from_chat) {
+        processForwardedMessage(message);
+    }
+}
+// --- Handler Callback Query (Tombol) ---
+function handleCallbackQuery(callbackQuery) {
+    let chatId = callbackQuery.message.chat.id;
+    let data = callbackQuery.data;
+    let queryId = callbackQuery.id;
+    if (data === "search_inline") { tg.answerCallbackQuery(queryId, "Silakan cari berkas..."); }
+    else if (data === "help") {
+        tg.answerCallbackQuery(queryId);
+        tg.sendMessage(chatId, "Bot ini dapat mencari berkas... (pesan bantuan)");
     }
 }
 
-// --- Fungsi Penanganan Perintah ---
-function handleCommand(message) {
-    var text = message.text;
-    var chatId = message.chat.id;
-    var command = text.split(" ")[0].toLowerCase();
-
-    switch (command) {
-        case "/start":
-            sendText(chatId, "Selamat datang! Saya adalah bot penerus pesan. Gunakan /help untuk bantuan.");
-            break;
-        case "/help":
-            sendText(chatId, "Perintah yang tersedia:\n/start - Memulai bot\n/help - Menampilkan bantuan\n/listchannels - Menampilkan daftar channel\n/addchannel [ID_CHANNEL] - Menambah channel\n/removechannel [ID_CHANNEL] - Menghapus channel\n/stop - Menonaktifkan bot\n/resume - Mengaktifkan bot\n/status - Cek status bot");
-            break;
-        case "/listchannels":
-            listChannels(chatId);
-            break;
-        case "/addchannel":
-            addChannel(chatId, text);
-            break;
-        case "/removechannel":
-            removeChannel(chatId, text); // Implementasikan fungsi ini
-            break;
-        case "/stop":
-            stopBot(chatId);
-            break;
-        case "/resume":
-            resumeBot(chatId);
-            break;
-        case "/status":
-            statusBot(chatId);
-            break;
-        default:
-            sendText(chatId, "Perintah tidak dikenali. Gunakan /help untuk bantuan.");
-    }
-}
-
-
-// --- Fungsi-fungsi Perintah ---
-function listChannels(chatId){
-    var channelList = "Channel yang dipantau:\n";
-      for (var i = 0; i < channelIds.length; i++) {
-        channelList += channelIds[i] + "\n";
-      }
-      sendText(chatId, channelList);
-}
-
-function addChannel(chatId, text){
-    var newChannelId = text.split(" ")[1];
-
-    if (newChannelId && newChannelId.startsWith("-100") && !isNaN(parseInt(newChannelId))) {
-        if (!channelIds.includes(parseInt(newChannelId))) {
-            channelIds.push(parseInt(newChannelId));
-            saveChannelIdsToSpreadsheet();
-            sendText(chatId, "Channel " + newChannelId + " berhasil ditambahkan.");
-        } else {
-            sendText(chatId, "Channel tersebut sudah ada dalam daftar.");
-        }
-    } else {
-        sendText(chatId, "ID Channel tidak valid.  Gunakan format: /addchannel -100xxxxxxxxxx");
-    }
-}
-
-//Contoh fungsi remove channel
-function removeChannel(chatId, text) {
-    var channelIdToRemove = text.split(" ")[1];
-
-    if (channelIdToRemove && channelIdToRemove.startsWith("-100") && !isNaN(parseInt(channelIdToRemove))) {
-        var index = channelIds.indexOf(parseInt(channelIdToRemove));
-        if (index > -1) {
-            channelIds.splice(index, 1); // Hapus channelId dari array
-            saveChannelIdsToSpreadsheet(); // Simpan perubahan ke spreadsheet
-            sendText(chatId, "Channel " + channelIdToRemove + " berhasil dihapus.");
-        } else {
-            sendText(chatId, "Channel tersebut tidak ada dalam daftar.");
-        }
-    } else {
-        sendText(chatId, "ID Channel tidak valid. Gunakan format: /removechannel -100xxxxxxxxxx");
-    }
-}
-
-function stopBot(chatId){
-    PropertiesService.getScriptProperties().setProperty('bot_status', 'stopped');
-    sendText(chatId, "Bot dihentikan sementara.");
-}
-
-function resumeBot(chatId){
-    PropertiesService.getScriptProperties().setProperty('bot_status', 'active');
-    sendText(chatId, "Bot diaktifkan kembali.");
-}
-
-function statusBot(chatId){
-    var botStatus = PropertiesService.getScriptProperties().getProperty('bot_status');
-     if (!botStatus || botStatus === 'active'){
-          sendText(chatId, "Bot aktif");
-      } else {
-          sendText(chatId, "Bot non-aktif");
-      }
-}
-
-// --- Fungsi untuk Menyimpan Data Pesan ---
-
-function saveData(message) {
-    try {
-        var ss = SpreadsheetApp.openById(spreadsheetId);
-        var sheet = ss.getSheetByName(SHEET_DATA_NAME);
-
-        var fileId = "";
-        var fileType = "";
-
-        if (message.photo) {
-            fileId = message.photo[message.photo.length - 1].file_id;
-            fileType = "photo";
-        } else if (message.document) {
-            fileId = message.document.file_id;
-            fileType = "document";
-        } else if (message.video) {
-            fileId = message.video.file_id;
-            fileType = "video";
-        } else if (message.audio) {
-            fileId = message.audio.file_id;
-            fileType = "audio";
-        }  else if (message.animation) {
-            fileId = message.animation.file_id;
-            fileType = "animation";
-        }
-
-        var query = (message.caption || fileType || "message").toLowerCase();
-        sheet.appendRow([message.message_id, message.chat.id, fileId, fileType, message.caption || "", query, message.chat.id]);
-
-    } catch (error) {
-        Logger.log("Error di saveData:", error);
-        sendText(adminBot, "Error saat menyimpan data: " + error);
-    }
-}
-
-// --- Fungsi untuk Menangani Inline Query ---
-
+// --- Handler Inline Query ---
 function handleInlineQuery(inlineQuery) {
+    // Fungsi ini tidak perlu diubah, sudah untuk umum
+    let queryId = inlineQuery.id;
+    let queryText = inlineQuery.query;
+    let results = searchInSheets(queryText);
+    tg.answerInlineQuery(queryId, results);
+}
+
+// --- Handler Chosen Inline Result ---
+function handleChosenInlineResult(chosenResult) {
+    // Fungsi ini tidak perlu diubah, sudah untuk umum
+    let resultId = chosenResult.result_id;
+    let userId = chosenResult.from.id;
+    let fileId = getFileIdFromSheet(resultId);
+
+    if (fileId) {
+        tg.sendDocument(userId, fileId);
+    } else {
+        tg.sendMessage(userId, "Maaf, file tidak ditemukan.");
+    }
+}
+
+// --- Fungsi untuk mendapatkan file_id dari Sheet ---
+function getFileIdFromSheet(rowNumber) {
+    let ss = SpreadsheetApp.openById(spreadsheetId);
+    let sheet = ss.getActiveSheet();
+    let fileId = sheet.getRange(Number(rowNumber) + 1, 6).getValue();
+    return fileId;
+}
+
+// --- Fungsi /start ---
+function sendStartMessage(chatId, user) {
+    let fullName = (user.first_name || "") + " " + (user.last_name || "");
+    let text = `Halo, ${fullName.trim()}! Selamat datang... (pesan sambutan)`;
+     let keyboard = {
+        inline_keyboard: [
+            [{ text: "Cari Berkas", switch_inline_query_current_chat: "" }],
+            [{ text: "Bantuan", callback_data: "help" }],
+        ]
+    };
+    tg.sendMessage(chatId, text, null, null, null, null, JSON.stringify(keyboard));
+}
+
+// --- Fungsi Pemrosesan Dokumen (Hanya Admin) ---
+function processDocument(message) {
+    let chatId = message.chat.id;
+    let fileId = message.document.file_id;
+    let fileName = message.document.file_name;
+
+    // --- VALIDASI ADMIN ---
+    if (message.from.id !== adminBot) {
+        tg.sendMessage(chatId, "Maaf, hanya admin yang bisa mengupload file.");
+        return;
+    }
+    //Validasi hanya di private chat.
+     if (message.chat.type !== "private") {
+        tg.sendMessage(chatId, "Maaf, upload file hanya bisa dilakukan di private chat.");
+        return;
+    }
+
+    let file = tg.getFile(fileId);
+    let fileUrl = `https://api.telegram.org/file/bot${token}/${file.file_path}`;
+
     try {
-          if (!inlineQuery || !inlineQuery.query) {
-            Logger.log("Error: handleInlineQuery dipanggil tanpa inlineQuery yang valid.");
-            sendText(adminBot, "Error: handleInlineQuery dipanggil tanpa inlineQuery yang valid."); // Kirim ke admin
-            return; // Keluar dari fungsi
-        }
-        var query = inlineQuery.query;
-        var results = searchData(query);
-        var inlineQueryResults = results.map(function(row, index) {
-            return createInlineQueryResult(row, index);
-        });
-
-        var url = "https://api.telegram.org/bot" + token + "/answerInlineQuery";
-        var payload = {
-            "inline_query_id": inlineQuery.id,
-            "results": JSON.stringify(inlineQueryResults),
-            "cache_time": CACHE_TIME,
-        };
-        var options = {
-            "method": "post",
-            "payload": payload,
-            'muteHttpExceptions': true // Tambahkan ini
-
-        };
-        var response = UrlFetchApp.fetch(url, options);
-         // Periksa respons (opsional, tapi sangat disarankan)
-        Logger.log("Response dari answerInlineQuery:", response.getContentText());
-        if (response.getResponseCode() !== 200) {
-          sendText(adminBot, "Error saat answerInlineQuery: " + response.getContentText());
-        }
+        let response = UrlFetchApp.fetch(fileUrl);
+        let content = response.getContentText();
+        let data = parseCSV(content);
+        appendDataToSheet(data, fileId);
+        tg.sendMessage(chatId, `File "${fileName}" berhasil diunggah.`);
 
     } catch (error) {
-        Logger.log("Error di handleInlineQuery:", error);
-        sendText(adminBot, "Error saat memproses inline query: " + error);
+        tg.sendMessage(chatId, `Terjadi kesalahan: ${error}`);
+        if (debug) { tg.sendMessage(adminBot, `Error processDocument: ${error.stack}`); }
+    }
+}
+// --- Fungsi untuk memproses pesan yang di-forward (opsional) ---
+function processForwardedMessage(message) {
+    let chatId = message.chat.id;
+
+    // --- VALIDASI ADMIN ---
+    if (message.from.id !== adminBot) {
+        tg.sendMessage(chatId, "Maaf, hanya admin yang bisa menambahkan data.");
+        return;
+    }
+    //Validasi hanya di private chat
+    if (message.chat.type !== "private") {
+        tg.sendMessage(chatId, "Maaf, upload file hanya bisa dilakukan di private chat.");
+        return;
+    }
+
+    // Contoh: Jika pesan yang di-forward mengandung teks, simpan teks itu ke Sheet
+    if (message.text) {
+        // Format data (misalnya, [nama_file, deskripsi, url, keywords, kategori, file_id])
+        let data = [message.text, "Forwarded message", "", "", "", ""]; // Sesuaikan
+        appendDataToSheet(data, ""); // fileId kosong karena bukan dari upload file
+         tg.sendMessage(chatId, "Pesan berhasil ditambahkan ke database.");
+    } else {
+         tg.sendMessage(chatId, "Maaf, format pesan yang di-forward tidak didukung.");
     }
 }
 
-// --- Fungsi untuk Mencari Data (dengan Cache) ---
-
-function searchData(query) {
-    try {
-        var cache = CacheService.getScriptCache();
-        var cachedResults = cache.get(query);
-
-        if (cachedResults) {
-            Logger.log("Menggunakan hasil cache untuk query:", query);
-            return JSON.parse(cachedResults);
+// --- Fungsi Parsing CSV (Lebih Robust) ---
+function parseCSV(csvText) {
+    let lines = csvText.split(/\r\n|\n/);
+    let result = [];
+    for (let i = 1; i < lines.length; i++) { // Skip header
+        let line = lines[i].trim();
+        if (line) {
+            let values = line.split(',');
+             values = values.map(value => value.replace(/^"|"$/g, ''));
+            result.push(values);
         }
+    }
+    return result;
+}
 
-        var ss = SpreadsheetApp.openById(spreadsheetId);
-        var sheet = ss.getSheetByName(SHEET_DATA_NAME);
-
-        // Ambil hanya data yang diperlukan (optimasi)
-        var lastRow = sheet.getLastRow();
-        var data = sheet.getRange(2, 1, lastRow > 1 ? lastRow -1 : 1, 7).getValues(); // Ambil semua kolom. Sesuaikan jika perlu
-
-
-        var results = [];
-        for (var i = 0; i < data.length; i++) {
-            if (data[i][5].toLowerCase().includes(query.toLowerCase())) { // Kolom 'query'
-                results.push(data[i]);
-            }
-        }
-
-        cache.put(query, JSON.stringify(results), CACHE_TIME);
-        Logger.log("Menyimpan hasil ke cache untuk query:", query);
-        return results;
-
-    } catch (error) {
-        Logger.log("Error di searchData:", error);
-        sendText(adminBot, "Error saat mencari data: " + error);
-        return []; // Kembalikan array kosong jika terjadi error
+// --- Fungsi Menyimpan ke Sheet ---
+function appendDataToSheet(data, fileId) {
+    let ss = SpreadsheetApp.openById(spreadsheetId);
+    let sheet = ss.getActiveSheet();
+    for(let i = 0; i<data.length; i++){
+      let rowData = data[i];
+      rowData.push(fileId);
+      sheet.appendRow(rowData);
     }
 }
 
-// --- Fungsi untuk Membuat Objek Hasil Inline Query ---
-function createInlineQueryResult(row, index) {
-    var messageId = row[0];
-    var chatId = row[1];
-    var fileId = row[2];
-    var fileType = row[3];
-    var caption = row[4];
-    var sourceChatId = row[6];
+// --- Fungsi Pencarian di Sheet ---
+function searchInSheets(query) {
+    let ss = SpreadsheetApp.openById(spreadsheetId);
+    let sheet = ss.getActiveSheet();
+    let data = sheet.getDataRange().getValues();
+    let results = [];
 
-    var inlineQueryResult;
-
-    switch (fileType) {
-        case "photo":
-            inlineQueryResult = { type: "photo", id: String(index), photo_file_id: fileId, caption: caption }; break;
-        case "document":
-            inlineQueryResult = { type: "document", id: String(index), document_file_id: fileId, caption: caption }; break;
-        case "video":
-            inlineQueryResult = { type: "video", id: String(index), video_file_id: fileId, caption: caption, title: caption || "Video" }; break;
-        case "audio":
-            inlineQueryResult = { type: "audio", id: String(index), audio_file_id: fileId, caption: caption }; break;
-        case "animation":
-            inlineQueryResult = { type: "animation", id: String(index), gif_file_id: fileId, caption: caption }; break;
-        default:
-            inlineQueryResult = { type: "article", id: String(index), title: caption || "Pesan Teks", input_message_content: { message_text: caption || "Pesan dari channel" }};
+    for (let i = 1; i < data.length; i++) { // Mulai dari 1, abaikan header
+        //Cari di kolom 0, 1 dan 3
+        if (String(data[i][0]).toLowerCase().includes(query.toLowerCase()) ||
+            String(data[i][1]).toLowerCase().includes(query.toLowerCase()) ||
+            String(data[i][3]).toLowerCase().includes(query.toLowerCase()))
+        {
+            let fileUrl = data[i][2] || "";
+            results.push({
+                type: "document",
+                id: String(i),
+                title: data[i][0],
+                document_file_id: data[i][5],
+                caption: data[i][0] + (fileUrl ? "\n" + fileUrl : ""),
+                description: data[i][1],
+            });
+        }
     }
-    return inlineQueryResult;
+    return results;
 }
-
-// --- Fungsi Utilitas (Kirim Teks) ---
-
-function sendText(chatId, text, parseMode) {
-    try {
-        var url = "https://api.telegram.org/bot" + token + "/sendMessage";
-        var payload = {
-            "method": "sendMessage",
-            "chat_id": String(chatId),
-            "text": text,
-            "parse_mode": parseMode || null
-        };
-        var options = {
-            "method": "post",
-            "payload": payload,
-            'muteHttpExceptions': true // Tambahkan ini
-        };
-         var response = UrlFetchApp.fetch(url, options);
-        // Log response (opsional)
-        Logger.log("Response dari sendMessage:", response.getContentText());
-        if(response.getResponseCode() != 200){
-            sendText(adminBot, "Error saat send message: " + response.getContentText()); // Kirim error ke admin
-        }
-
-    } catch (error) {
-        Logger.log("Error di sendText:", error);
-        //sendText(adminBot, "Error saat mengirim pesan: " + error); //Hindari infinite loop
-    }
-}
-
-
-// --- Fungsi untuk Menyimpan channelIds ke Spreadsheet ---
-function saveChannelIdsToSpreadsheet() {
-    try{
-        var ss = SpreadsheetApp.openById(spreadsheetId);
-        var sheet = ss.getSheetByName(SHEET_CHANNEL_NAME);
-        if(!sheet){ //Jika sheet tidak ada, buat
-            sheet = ss.insertSheet(SHEET_CHANNEL_NAME);
-        }
-
-        //Hapus semua isi sheet, lalu tulis ulang (cara sederhana)
-        sheet.clearContents();
-        sheet.appendRow(["channel_id"]); // Header
-        for (var i = 0; i < channelIds.length; i++) {
-            sheet.appendRow([channelIds[i]]);
-        }
-    } catch(error){
-        Logger.log("Error di saveChannelIdsToSpreadsheet:", error);
-        sendText(adminBot, "Error: " + error);
-    }
-}
-
-// --- Fungsi untuk Memuat channelIds dari Spreadsheet ---
-function loadChannelIdsFromSpreadsheet(){
-    try{
-        var ss = SpreadsheetApp.openById(spreadsheetId);
-        var sheet = ss.getSheetByName(SHEET_CHANNEL_NAME);
-        if(!sheet){
-            return; //Jika sheet tidak ada, jangan lakukan apa-apa
-        }
-        var data = sheet.getDataRange().getValues();
-
-        channelIds = []; // Reset channelIds
-        for (var i = 1; i < data.length; i++) { // Mulai dari 1 (lewati header)
-            channelIds.push(parseInt(data[i][0])); // Tambahkan ke array channelIds
-        }
-    } catch(error){
-         Logger.log("Error di loadChannelIdsFromSpreadsheet:", error);
-        sendText(adminBot, "Error: " + error);
-    }
-}
-
-// --- Fungsi Utilitas (getMe, setWebhook, dll. - Tidak Perlu Diubah) ---
-
-function getMe() {
-  var url = "https://api.telegram.org/bot" + token + "/getMe";
-    var response = UrlFetchApp.fetch(url);
-    Logger.log(response.getContentText());
-}
-
-function setWebhook() {
-    var webhookUrl = "YOUR_WEBHOOK_URL"; // Ganti dengan URL webhook (setelah deploy)
-    var url = "https://api.telegram.org/bot" + token + "/setWebhook?url=" + webhookUrl;
-    var response = UrlFetchApp.fetch(url);
-    Logger.log(response.getContentText());
-}
-function getWebhookInfo() {
-  var url = "https://api.telegram.org/bot" + token + "/getWebhookInfo";
-    var response = UrlFetchApp.fetch(url);
-    Logger.log(response.getContentText());
-}
-
-function deleteWebhook() {
-  var url = "https://api.telegram.org/bot" + token + "/deleteWebhook";
-    var response = UrlFetchApp.fetch(url);
-    Logger.log(response.getContentText());
-}
-
-
-//
