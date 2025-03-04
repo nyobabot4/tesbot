@@ -47,7 +47,7 @@ function handleCallbackQuery(callbackQuery) {
     if (data === "search_inline") { tg.answerCallbackQuery(queryId, "Silakan cari berkas..."); }
     else if (data === "help") {
         tg.answerCallbackQuery(queryId);
-        tg.sendMessage(chatId, "Bot ini dapat mencari berkas... (pesan bantuan)");
+        tg.sendMessage(chatId, "Bot ini dapat mencari berkas... (pesan bantuan)", "HTML");
     }
 }
 
@@ -71,10 +71,10 @@ function handleChosenInlineResult(chosenResult) {
         if (fileId !== "" && fileId !== null && fileId !== undefined) {
             tg.sendDocument(userId, fileId);
         } else {
-            tg.sendMessage(userId, "Maaf, file tidak ditemukan (fileId kosong).");
+            tg.sendMessage(userId, "Maaf, file tidak ditemukan (fileId kosong).", "HTML"); // Add parse_mode
         }
     } else {
-        tg.sendMessage(userId, "Maaf, file tidak ditemukan.");
+        tg.sendMessage(userId, "Maaf, file tidak ditemukan.", "HTML"); // Add parse_mode
     }
 }
 
@@ -97,7 +97,7 @@ function sendStartMessage(chatId, user) {
             [{ text: "Bantuan", callback_data: "help" }],
         ]
     };
-    tg.sendMessage(chatId, text, null, null, null, null, JSON.stringify(keyboard));
+    tg.sendMessage(chatId, text, "HTML", null, null, null, JSON.stringify(keyboard)); // Add parse_mode
 }
 
 // --- Fungsi untuk memproses pesan yang di-forward (opsional) ---
@@ -120,11 +120,11 @@ function processForwardedMessage(message) {
        // Format data (misalnya, [nama_file, deskripsi, url, keywords, kategori, file_id])
         let data = [message.text, "Forwarded message", "", "", "", ""]; // Sesuaikan
         appendDataToSheet(data, ""); // fileId kosong karena bukan dari upload file
-         tg.sendMessage(chatId, "Pesan berhasil ditambahkan ke database.");
+         tg.sendMessage(chatId, "Pesan berhasil ditambahkan ke database.", "HTML");
 
     }
       else {
-        tg.sendMessage(chatId, "Maaf, format pesan yang di-forward tidak didukung.");
+        tg.sendMessage(chatId, "Maaf, format pesan yang di-forward tidak didukung.", "HTML");
     }
 }
 
@@ -158,25 +158,25 @@ function processDocument(message) {
             // Proses file CSV
             let data = parseCSV(content);
             appendDataToSheet(data, fileId);
-            tg.sendMessage(chatId, `File CSV "${fileName}" berhasil diunggah.`);
+            tg.sendMessage(chatId, `File CSV "${fileName}" berhasil diunggah.`, "HTML");
 
         } else if (mimeType === "application/pdf") {
             // Proses file PDF
             let data = [[fileName, "PDF Document", fileUrl, "", "", fileId]];
              appendDataToSheet(data, fileId);
-            tg.sendMessage(chatId, `File PDF "${fileName}" berhasil diunggah.`);
+            tg.sendMessage(chatId, `File PDF "${fileName}" berhasil diunggah.`, "HTML");
 
         } else if (mimeType === "application/vnd.ms-excel" || mimeType === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") {
             //Proses File Excel
             let data = processExcelFile(blob); //Harus implementasikan
              appendDataToSheet(data,fileId);
-              tg.sendMessage(chatId, `File Excel "${fileName}" berhasil diunggah.`);
+              tg.sendMessage(chatId, `File Excel "${fileName}" berhasil diunggah.`, "HTML");
 
         }else if (mimeType.startsWith("image/")) {
             // Handle gambar
              let data = [[fileName, "Image", fileUrl, "", "", fileId]];
             appendDataToSheet(data, fileId);
-            tg.sendMessage(chatId, `Gambar "${fileName}" berhasil diunggah.`);
+            tg.sendMessage(chatId, `Gambar "${fileName}" berhasil diunggah.`, "HTML");
 
         } else if (mimeType.startsWith("video/")) {
             // Handle video
@@ -184,23 +184,23 @@ function processDocument(message) {
                // Periksa Ukuran
             const MAX_BOT_API_SIZE = 50 * 1024 * 1024; // 50 MB in bytes
             if(fileSize > MAX_BOT_API_SIZE){
-              tg.sendMessage(chatId, `File terlalu besar, maksimal ${MAX_BOT_API_SIZE / 1024 / 1024} MB`);
+              tg.sendMessage(chatId, `File terlalu besar, maksimal ${MAX_BOT_API_SIZE / 1024 / 1024} MB`, "HTML");
               return; //Hentikan eksekusi
             }
              let data = [[fileName, "Video", fileUrl, `Size: ${fileSize} bytes`, "", fileId]];
             appendDataToSheet(data, fileId);
-            tg.sendMessage(chatId, `Video "${fileName}" berhasil diunggah.`);
+            tg.sendMessage(chatId, `Video "${fileName}" berhasil diunggah.`, "HTML");
 
         }else {
             // Jenis file lain
              let data = [[fileName, mimeType, fileUrl, "", "", fileId]];
               appendDataToSheet(data,fileId);
-            tg.sendMessage(chatId, `File "${fileName}" (jenis: ${mimeType}) berhasil diunggah.`);
+            tg.sendMessage(chatId, `File "${fileName}" (jenis: ${mimeType}) berhasil diunggah.`, "HTML");
         }
 
     } catch (error) {
-        tg.sendMessage(chatId, `Terjadi kesalahan: ${error}`);
-        if (debug) { tg.sendMessage(adminBot, `Error processDocument: ${error.stack}`); }
+        tg.sendMessage(chatId, `Terjadi kesalahan: ${error}`, "HTML");
+        if (debug) { tg.sendMessage(adminBot, `Error processDocument: ${error.stack}`, "HTML"); }
     }
 }
 
