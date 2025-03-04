@@ -1,271 +1,208 @@
-// Ganti dengan token API bot Anda
-const BOT_TOKEN = '7849305390:AAEH2H2L4XPKL8lJwEiArlqIMfXsprnQ30Q';
-// Ganti dengan ID spreadsheet Anda
-const SPREADSHEET_ID = '10TupgRfroPas2SjNNY19Q4uB82AYGUVwIIisBxb9Mgg';
-const SHEET_NAME = 'Sheet1'; // Ganti jika nama sheet Anda berbeda
+// -- WAJIB DIISI --
+var token = "7849305390:AAEH2H2L4XPKL8lJwEiArlqIMfXsprnQ30Q"; // Ganti dengan token bot Anda
+const adminBot = 123456789; // Ganti dengan ID Telegram Anda
+const spreadsheetId = "10TupgRfroPas2SjNNY19Q4uB82AYGUVwIIisBxb9Mgg"; // Ganti dengan ID Google Sheet Anda
+const sheetName = "sheet1"; // Ganti dengan nama sheet yang digunakan (opsional)
 
-// URL dasar API Telegram
-const TELEGRAM_BASE_URL = 'https://api.telegram.org/bot' + BOT_TOKEN;
+// -- KONFIGURASI --
+const debug = false; // Set ke true untuk debugging (kirim struktur JSON ke admin)
+const tg = new telegram.daftar(token);
 
-// Fungsi utama untuk memproses update dari Telegram
+// -- FUNGSI UTILITY --
+
+function getSheet() {
+    return SpreadsheetApp.openById(spreadsheetId).getSheetByName(sheetName);
+}
+
+function logToSheet(data) { // Fungsi untuk log ke sheet (debugging)
+  const sheet = getSheet();
+  sheet.appendRow([new Date(), JSON.stringify(data)]);
+}
+
+
+// -- FUNGSI TELEGRAM (opsional, dari kode Anda) --
+
+function getMe() {
+    let me = tg.getMe();
+    return Logger.log(me);
+}
+
+function setWebhook() {
+    var url = ScriptApp.getService().getUrl(); // Dapatkan URL webhook otomatis
+    var r = tg.setWebhook(url);
+    return Logger.log(r);
+}
+
+function getWebhookInfo() {
+    let hasil = tg.getWebhookInfo();
+    return Logger.log(hasil);
+}
+
+function deleteWebhook() {
+    let hasil = tg.deleteWebhook();
+    return Logger.log(hasil);
+}
+
+// --- FUNGSI UTAMA BOT ---
+
 function doPost(e) {
-  const update = JSON.parse(e.postData.contents);
+    try {
+        const update = JSON.parse(e.postData.contents);
 
-  // Cek apakah update adalah inline query
-    if (update.inline_query) {
-      handleInlineQuery(update.inline_query);
-      return;
+        if (debug) {
+            tg.sendMessage(adminBot, JSON.stringify(update));  // Kirim data mentah ke admin
+        }
+       // logToSheet(update); // opsi lain log
+
+        if (update.message) {
+            handleMessage(update.message);
+        } else if (update.inline_query) {
+            handleInlineQuery(update.inline_query);
+        }
+
+    } catch (error) {
+      tg.sendMessage(adminBot, "Error: " + error.toString());
+      logToSheet(error); // opsi lain untuk log error
     }
-
-  // Jika bukan inline query, proses sebagai pesan biasa
-  if (update.message) {
-    handleMessage(update.message);
-  }
 }
 
-// --- Fungsi untuk menangani pesan ---
 function handleMessage(message) {
-  const chatId = message.chat.id;
-  const text = message.text;
+    const chatId = message.chat.id;
+    const text = message.text;
 
-  // Perintah /start
-  if (text === '/start') {
-    sendStartMessage(chatId);
-    return;
-  }
+    if (text === "/start") {
+        // Buat keyboard inline
+        const keyboard = [
+            [{ text: "🔍 Cari File", switch_inline_query_current_chat: "" }],
+            [{ text: "ℹ️ Bantuan", callback_data: "help" }],
+        ];
+        const replyMarkup = { inline_keyboard: keyboard };
 
-  // Cek apakah pesan diteruskan (forwarded)
-  if (message.forward_from || message.forward_from_chat) {
-    saveForwardedMessage(message);
-    sendMessage(chatId, "Pesan diteruskan telah disimpan.");
-    return;
-  }
-    // Perintah /help
-  if (text === '/help') {
-    sendHelpMessage(chatId);
-    return;
-  }
+        tg.sendMessage(chatId, "Selamat datang!  Gunakan tombol di bawah untuk mencari file atau mendapatkan bantuan.", { reply_markup: replyMarkup });
 
-  // Cek apakah ada file yang diupload
-  if (message.document || message.photo || message.video || message.audio) { // Tambahkan jenis media lain jika perlu
-    saveUploadedFile(message);
-    sendMessage(chatId, "File berhasil disimpan!");
-    return;
-  }
-  // Jika tidak ada yang cocok, kirim pesan default
-   sendMessage(chatId, "Perintah tidak dikenali. Ketik /help untuk bantuan.");
-}
-
-// --- Fungsi untuk menangani inline query ---
-function handleInlineQuery(inlineQuery) {
-  const queryId = inlineQuery.id;
-  const queryText = inlineQuery.query.toLowerCase(); // Ubah ke lowercase untuk pencarian case-insensitive
-  const results = searchFiles(queryText); // Panggil fungsi pencarian
-
-  // Kirim hasil pencarian ke Telegram
-   answerInlineQuery(queryId, results);
-}
-
-// --- Fungsi-fungsi bantuan ---
-
-function sendStartMessage(chatId) {
-  const text = "Selamat datang!  Saya adalah bot penyimpan file.\n\n" +
-             "Admin dapat mengunggah file atau meneruskan pesan ke saya.\n\n" +
-             "Gunakan tombol di bawah untuk mencari atau mendapatkan bantuan.";
-  const keyboard = {
-    inline_keyboard: [
-      [{ text: "Cari", switch_inline_query_current_chat: "" }], // Tombol Cari (inline query)
-      [{ text: "Bantuan", callback_data: "help" }]
-    ]
-  };
-   sendMessage(chatId, text, keyboard);
-}
-function sendHelpMessage(chatId) {
-    const text = "Cara menggunakan bot ini:\n\n" +
-               "*Admin*:\n" +
-               "- Unggah file langsung ke bot, atau\n" +
-               "- Teruskan pesan (forward) yang berisi file atau informasi ke bot.\n\n" +
-               "*Pengguna*:\n" +
-               "- Gunakan pencarian inline (ketik `@nama_bot query`) untuk mencari file.";
-    sendMessage(chatId, text, null, 'Markdown'); // Aktifkan Markdown
-}
-
-function sendMessage(chatId, text, replyMarkup = null, parseMode=null) {
-  const url = TELEGRAM_BASE_URL + '/sendMessage';
-  const payload = {
-    method: 'post',
-    chat_id: chatId,
-    text: text,
-    reply_markup: replyMarkup,
-    parse_mode: parseMode
-  };
-   UrlFetchApp.fetch(url, payload);
-}
-
-function saveUploadedFile(message) {
-    let fileId, fileName, fileType, caption,pengirim;
-    pengirim = message.chat.id;
-
-    // Tentukan jenis file dan ambil data yang relevan
-    if (message.document) {
-      fileId = message.document.file_id;
-      fileName = message.document.file_name;
-      fileType = 'document';
-      caption = message.caption || '';
-    } else if (message.photo) {
-      // Photo biasanya array, ambil yang resolusi terbesar
-      const photo = message.photo[message.photo.length - 1];
-      fileId = photo.file_id;
-      fileName = 'photo_' + photo.file_unique_id + '.jpg'; // Buat nama file
-      fileType = 'photo';
-      caption = message.caption || '';
-    } else if (message.video) { //contoh tambahan
-      fileId = message.video.file_id;
-      fileName = message.video.file_name;
-      fileType = 'video';
-      caption = message.caption || '';
-    } else if(message.audio){
-      fileId = message.audio.file_id;
-      fileName = message.audio.file_name;
-      fileType = 'audio';
-      caption = message.caption || '';
+    } else if (message.forward_from && message.forward_from.id === adminBot) {
+        // Admin meneruskan pesan
+        saveForwardedMessage(message);
+        tg.sendMessage(chatId, "Pesan tersimpan!");
     }
+     else if (message.document && chatId === adminBot) { // Admin upload file
+      saveUploadedFile(message);
+      tg.sendMessage(chatId, "File berhasil disimpan!");
+    }
+    else {
+        // Pesan lain (tidak ditangani)
+        tg.sendMessage(chatId, "Perintah tidak dikenali.");
+    }
+}
 
-    // Simpan ke sheet
-    const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(SHEET_NAME);
-    sheet.appendRow([fileId, fileName, fileType, caption, '', new Date(), pengirim]);
+function handleInlineQuery(inlineQuery) {
+    const queryId = inlineQuery.id;
+    const queryText = inlineQuery.query.toLowerCase();
+    const results = searchFiles(queryText); // Cari file berdasarkan query
+    tg.answerInlineQuery(queryId, results, { cache_time: 10 });  // cache_time bisa disesuaikan
+}
+
+// --- FUNGSI PENYIMPANAN DATA ---
+function saveUploadedFile(message) {
+    const sheet = getSheet();
+    const fileId = message.document.file_id;
+    const fileName = message.document.file_name;
+    sheet.appendRow([new Date(), "file", fileName, fileId, message.chat.id]);
 }
 
 function saveForwardedMessage(message) {
-   const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(SHEET_NAME);
-    let fileId, fileName, fileType, caption, messageId,pengirim;
-    pengirim = message.chat.id;
+    const sheet = getSheet();
+      let fileId = '';
+    let fileName = '';
 
-  //Simpan jika pesan yang diforward ada filenya
-  if(message.document || message.photo || message.video || message.audio){
-      if (message.document) {
+    if (message.document) {
         fileId = message.document.file_id;
         fileName = message.document.file_name;
-        fileType = 'document';
-        caption = message.caption || '';
-      } else if (message.photo) {
-        // Photo biasanya array, ambil yang resolusi terbesar
-        const photo = message.photo[message.photo.length - 1];
-        fileId = photo.file_id;
-        fileName = 'photo_' + photo.file_unique_id + '.jpg'; // Buat nama file
-        fileType = 'photo';
-        caption = message.caption || '';
-      } else if (message.video) { //contoh tambahan
+    } else if(message.photo){ //untuk photo, ambil file_id yang paling besar (kualitas terbaik)
+        fileId = message.photo[message.photo.length - 1].file_id;
+        fileName = "photo_" + fileId;
+    } else if(message.video){
         fileId = message.video.file_id;
-        fileName = message.video.file_name;
-        fileType = 'video';
-        caption = message.caption || '';
-      } else if(message.audio){
-        fileId = message.audio.file_id;
-        fileName = message.audio.file_name;
-        fileType = 'audio';
-        caption = message.caption || '';
-      }
-    messageId = message.forward_from_message_id || message.forward_from_chat.id;
-    sheet.appendRow([fileId, fileName, fileType, caption, messageId, new Date(),pengirim]);
-    return;
-  }
+        fileName = message.video.file_name || "video_" + fileId;
+    }
+     else if (message.text) {
+        fileName = "text"; // atau sesuaikan dengan jenis pesan lain
+    }
+    // Tambahkan jenis pesan/media lain sesuai kebutuhan
 
-  //Jika pesan yang diforward tidak ada filenya
-  caption = message.text;
-  messageId = message.forward_from_message_id || message.forward_from_chat.id;
-  sheet.appendRow(['', '', 'forwarded_text', caption, messageId, new Date(),pengirim]);
-
+    sheet.appendRow([new Date(), "forwarded", fileName , fileId, message.chat.id]);
 }
+
+// --- FUNGSI PENCARIAN ---
 
 function searchFiles(query) {
-   const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(SHEET_NAME);
-  const data = sheet.getDataRange().getValues();
-  const results = [];
+    const sheet = getSheet();
+    const data = sheet.getDataRange().getValues();
+    const results = [];
 
-    // Iterasi melalui data (mulai dari baris ke-2, lewati header)
-      for (let i = 1; i < data.length; i++) {
+    // Header diabaikan (baris pertama)
+    for (let i = 1; i < data.length; i++) {
         const row = data[i];
-        const fileName = row[1] ? row[1].toString().toLowerCase() : ''; //kolom file_name
-        const caption = row[3] ? row[3].toString().toLowerCase(): '';  // Kolom caption
+        const type = row[1]; // "file" atau "forwarded"
+        const fileName = row[2].toLowerCase();
+        const fileId = row[3];
 
-          // Cek apakah query cocok dengan nama file atau caption
-          if (fileName.includes(query) || caption.includes(query)) {
-            const fileId = row[0];
-            const fileType = row[2];
-
-            let result = {}; // Inisialisasi di awal
-
-            if (fileType === 'photo') {
-              result = {
-                type: 'photo',
-                id: i.toString(), // ID unik untuk hasil pencarian
-                photo_file_id: fileId,
-                caption: caption,
-              };
-            } else if (fileType === 'document') {
-              result = {
-                type: 'document',
-                id: i.toString(),
-                document_file_id: fileId,
-                title: fileName,
-                caption: caption
-              };
-            } else if(fileType === 'video'){ //contoh
+        if (fileName.includes(query)) {
+          let result = {};
+            if(type === "file" || (type === "forwarded" && fileName.startsWith("photo_")) ){
                result = {
-                type: 'video',
-                id: i.toString(),
-                video_file_id: fileId,
-                title: fileName,
-                caption: caption
-              };
-            } else if (fileType === 'forwarded_text') {
-              // Handle jika hasil pencarian adalah teks yang diteruskan
-              result = {
-                type: 'article',  // Gunakan 'article' untuk teks
-                id: i.toString(),
-                title: 'Pesan Terusan', // Judul tetap
+                    type: "photo",
+                    id: Utilities.base64Encode(fileId), // ID unik untuk hasil inline
+                    photo_file_id: fileId,
+                    title: fileName
+                };
+            } else if (type === "forwarded" && fileName.startsWith("video_")){
+                 result = {
+                    type: "video",
+                    id: Utilities.base64Encode(fileId),
+                    video_file_id: fileId,
+                    title: fileName
+                };
+            }
+              else if(type === "forwarded" && fileName){ //untuk text dan file
+                result = {
+                  type: "article", // Gunakan article untuk pesan teks
+                  id: Utilities.base64Encode(fileId + i),  //ID harus unik, jadi tambahkan index baris
+                  title: fileName,
+                  input_message_content: {
+                    message_text: `File: ${fileName}\nFile ID: ${fileId}`,
+
+                  }
+                };
+                //jika ingin mengirimkan file dari forwarded text
+                /*
                 input_message_content: {
-                message_text: caption,  // Isi dengan caption
-                },
-                description: caption.substring(0, 50), // Deskripsi singkat
-              };
-             }
-            if (Object.keys(result).length > 0) { // Periksa result tidak kosong
+                    message_text: `/get ${fileId}`,
+                  }
+                */
+              }
+
+
+            if(Object.keys(result).length > 0) { //cek result kosong atau tidak
               results.push(result);
             }
+            if(results.length >= 50) break; // Batasi hasil (maks 50)
+        }
+    }
 
-            if (results.length >= 50) {
-              break;  // Batasi hasil (maksimal 50)
-            }
-          }
-      }
-  return results;
+    return results;
 }
 
-function answerInlineQuery(queryId, results) {
-  const url = TELEGRAM_BASE_URL + '/answerInlineQuery';
-  const payload = {
-    method: 'post',
-    inline_query_id: queryId,
-    results: JSON.stringify(results), // Hasil harus dalam format JSON string
-    cache_time: 0 // Nonaktifkan caching jika hasil sering berubah.  Atur ke nilai > 0 jika boleh cache.
-  };
-  UrlFetchApp.fetch(url, payload);
-}
 
-// Fungsi untuk mengatur Webhook
-function setWebhook() {
-  const webAppUrl = ScriptApp.getService().getUrl();
-  const url = TELEGRAM_BASE_URL + '/setWebhook?url=' + webAppUrl;
-  const response = UrlFetchApp.fetch(url);
-  Logger.log(response.getContentText()); // Log response untuk debugging
-}
+//--- Callback Query Handler (untuk tombol Bantuan, dll.) --
+function handleCallbackQuery(callbackQuery) {
+  const queryId = callbackQuery.id;
+  const data = callbackQuery.data;
+  const chatId = callbackQuery.message.chat.id;
 
-//Fungsi untuk menghapus Webhook
-function deleteWebhook() {
-  const url = TELEGRAM_BASE_URL + '/deleteWebhook';
-  const response = UrlFetchApp.fetch(url);
-  Logger.log(response.getContentText()); // Log response untuk debugging
+  if (data === "help") {
+    tg.answerCallbackQuery(queryId, { text: "Ini adalah pesan bantuan.  Anda bisa menambahkan instruksi penggunaan bot di sini.", show_alert: true });
+    // Atau, kirim pesan terpisah
+    // tg.sendMessage(chatId, "Ini pesan bantuan...");
+  }
 }
-
