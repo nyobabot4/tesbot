@@ -1,0 +1,404 @@
+// --- Konfigurasi (Ganti Nilai-Nilai Ini) ---
+var token = "7849305390:AAFQKbXtkii-fp_KvBW0loO_du2_09vpNEo";          // Token bot dari BotFather
+const adminBot = 2109541199;            // ID Telegram Anda
+const channelIds = [-1001314857941, -1001656226794, -1001765650465]; // Daftar ID channel
+const spreadsheetId = "10TupgRfroPas2SjNNY19Q4uB82AYGUVwIIisBxb9Mgg";  // ID spreadsheet
+
+// --- Konstanta (Jangan Diubah Kecuali Anda Tahu Apa yang Anda Lakukan) ---
+const DEBUG = false; // Set ke true untuk debugging
+const CACHE_TIME = 300; // Waktu cache dalam detik (5 menit)
+const SHEET_DATA_NAME = "Sheet1"; // Nama sheet untuk data pesan
+const SHEET_CHANNEL_NAME = "SheetChannel"; //Nama sheet untuk channel (optional)
+
+// --- Fungsi Utama (doPost - Webhook) ---
+
+function doPost(e) {
+    try {
+        if (!e || !e.postData || !e.postData.contents) {
+            return;
+        }
+
+        var update = JSON.parse(e.postData.contents);
+
+        if (DEBUG) {
+            sendText(adminBot, JSON.stringify(update, null, 2));
+        }
+
+        //Handle command
+        if (update.message && update.message.text && update.message.text.startsWith("/")) {
+            handleCommand(update.message);
+            return;
+        }
+
+
+        // Periksa status bot (aktif atau tidak)
+        var botStatus = PropertiesService.getScriptProperties().getProperty('bot_status');
+        if (botStatus === 'stopped') {
+           return; // Jika bot dihentikan, jangan proses apa pun
+        }
+
+        //Handle channel post
+        if (update.channel_post && channelIds.includes(update.channel_post.chat.id)) {
+            saveData(update.channel_post);
+            return;
+        }
+
+      //Handle pesan
+        if(update.message && channelIds.includes(update.message.chat.id)){
+            saveData(update.message);
+            return;
+        }
+
+      //Handle inline query
+        if (update.inline_query) {
+            handleInlineQuery(update.inline_query);
+            return;
+        }
+
+
+    } catch (error) {
+        Logger.log("Error di doPost:", error);
+        sendText(adminBot, "Error: " + error);
+    }
+}
+
+// --- Fungsi Penanganan Perintah ---
+function handleCommand(message) {
+    var text = message.text;
+    var chatId = message.chat.id;
+    var command = text.split(" ")[0].toLowerCase();
+
+    switch (command) {
+        case "/start":
+            sendText(chatId, "Selamat datang! Saya adalah bot penerus pesan. Gunakan /help untuk bantuan.");
+            break;
+        case "/help":
+            sendText(chatId, "Perintah yang tersedia:\n/start - Memulai bot\n/help - Menampilkan bantuan\n/listchannels - Menampilkan daftar channel\n/addchannel [ID_CHANNEL] - Menambah channel\n/removechannel [ID_CHANNEL] - Menghapus channel\n/stop - Menonaktifkan bot\n/resume - Mengaktifkan bot\n/status - Cek status bot");
+            break;
+        case "/listchannels":
+            listChannels(chatId);
+            break;
+        case "/addchannel":
+            addChannel(chatId, text);
+            break;
+        case "/removechannel":
+            removeChannel(chatId, text); // Implementasikan fungsi ini
+            break;
+        case "/stop":
+            stopBot(chatId);
+            break;
+        case "/resume":
+            resumeBot(chatId);
+            break;
+        case "/status":
+            statusBot(chatId);
+            break;
+        default:
+            sendText(chatId, "Perintah tidak dikenali. Gunakan /help untuk bantuan.");
+    }
+}
+
+
+// --- Fungsi-fungsi Perintah ---
+function listChannels(chatId){
+    var channelList = "Channel yang dipantau:\n";
+      for (var i = 0; i < channelIds.length; i++) {
+        channelList += channelIds[i] + "\n";
+      }
+      sendText(chatId, channelList);
+}
+
+function addChannel(chatId, text){
+    var newChannelId = text.split(" ")[1];
+
+    if (newChannelId && newChannelId.startsWith("-100") && !isNaN(parseInt(newChannelId))) {
+        if (!channelIds.includes(parseInt(newChannelId))) {
+            channelIds.push(parseInt(newChannelId));
+            saveChannelIdsToSpreadsheet();
+            sendText(chatId, "Channel " + newChannelId + " berhasil ditambahkan.");
+        } else {
+            sendText(chatId, "Channel tersebut sudah ada dalam daftar.");
+        }
+    } else {
+        sendText(chatId, "ID Channel tidak valid.  Gunakan format: /addchannel -100xxxxxxxxxx");
+    }
+}
+
+//Contoh fungsi remove channel
+function removeChannel(chatId, text) {
+    var channelIdToRemove = text.split(" ")[1];
+
+    if (channelIdToRemove && channelIdToRemove.startsWith("-100") && !isNaN(parseInt(channelIdToRemove))) {
+        var index = channelIds.indexOf(parseInt(channelIdToRemove));
+        if (index > -1) {
+            channelIds.splice(index, 1); // Hapus channelId dari array
+            saveChannelIdsToSpreadsheet(); // Simpan perubahan ke spreadsheet
+            sendText(chatId, "Channel " + channelIdToRemove + " berhasil dihapus.");
+        } else {
+            sendText(chatId, "Channel tersebut tidak ada dalam daftar.");
+        }
+    } else {
+        sendText(chatId, "ID Channel tidak valid. Gunakan format: /removechannel -100xxxxxxxxxx");
+    }
+}
+
+function stopBot(chatId){
+    PropertiesService.getScriptProperties().setProperty('bot_status', 'stopped');
+    sendText(chatId, "Bot dihentikan sementara.");
+}
+
+function resumeBot(chatId){
+    PropertiesService.getScriptProperties().setProperty('bot_status', 'active');
+    sendText(chatId, "Bot diaktifkan kembali.");
+}
+
+function statusBot(chatId){
+    var botStatus = PropertiesService.getScriptProperties().getProperty('bot_status');
+     if (!botStatus || botStatus === 'active'){
+          sendText(chatId, "Bot aktif");
+      } else {
+          sendText(chatId, "Bot non-aktif");
+      }
+}
+
+// --- Fungsi untuk Menyimpan Data Pesan ---
+
+function saveData(message) {
+    try {
+        var ss = SpreadsheetApp.openById(spreadsheetId);
+        var sheet = ss.getSheetByName(SHEET_DATA_NAME);
+
+        var fileId = "";
+        var fileType = "";
+
+        if (message.photo) {
+            fileId = message.photo[message.photo.length - 1].file_id;
+            fileType = "photo";
+        } else if (message.document) {
+            fileId = message.document.file_id;
+            fileType = "document";
+        } else if (message.video) {
+            fileId = message.video.file_id;
+            fileType = "video";
+        } else if (message.audio) {
+            fileId = message.audio.file_id;
+            fileType = "audio";
+        }  else if (message.animation) {
+            fileId = message.animation.file_id;
+            fileType = "animation";
+        }
+
+        var query = (message.caption || fileType || "message").toLowerCase();
+        sheet.appendRow([message.message_id, message.chat.id, fileId, fileType, message.caption || "", query, message.chat.id]);
+
+    } catch (error) {
+        Logger.log("Error di saveData:", error);
+        sendText(adminBot, "Error saat menyimpan data: " + error);
+    }
+}
+
+// --- Fungsi untuk Menangani Inline Query ---
+
+function handleInlineQuery(inlineQuery) {
+    try {
+          if (!inlineQuery || !inlineQuery.query) {
+            Logger.log("Error: handleInlineQuery dipanggil tanpa inlineQuery yang valid.");
+            sendText(adminBot, "Error: handleInlineQuery dipanggil tanpa inlineQuery yang valid."); // Kirim ke admin
+            return; // Keluar dari fungsi
+        }
+        var query = inlineQuery.query;
+        var results = searchData(query);
+        var inlineQueryResults = results.map(function(row, index) {
+            return createInlineQueryResult(row, index);
+        });
+
+        var url = "https://api.telegram.org/bot" + token + "/answerInlineQuery";
+        var payload = {
+            "inline_query_id": inlineQuery.id,
+            "results": JSON.stringify(inlineQueryResults),
+            "cache_time": CACHE_TIME,
+        };
+        var options = {
+            "method": "post",
+            "payload": payload,
+            'muteHttpExceptions': true // Tambahkan ini
+
+        };
+        var response = UrlFetchApp.fetch(url, options);
+         // Periksa respons (opsional, tapi sangat disarankan)
+        Logger.log("Response dari answerInlineQuery:", response.getContentText());
+        if (response.getResponseCode() !== 200) {
+          sendText(adminBot, "Error saat answerInlineQuery: " + response.getContentText());
+        }
+
+    } catch (error) {
+        Logger.log("Error di handleInlineQuery:", error);
+        sendText(adminBot, "Error saat memproses inline query: " + error);
+    }
+}
+
+// --- Fungsi untuk Mencari Data (dengan Cache) ---
+
+function searchData(query) {
+    try {
+        var cache = CacheService.getScriptCache();
+        var cachedResults = cache.get(query);
+
+        if (cachedResults) {
+            Logger.log("Menggunakan hasil cache untuk query:", query);
+            return JSON.parse(cachedResults);
+        }
+
+        var ss = SpreadsheetApp.openById(spreadsheetId);
+        var sheet = ss.getSheetByName(SHEET_DATA_NAME);
+
+        // Ambil hanya data yang diperlukan (optimasi)
+        var lastRow = sheet.getLastRow();
+        var data = sheet.getRange(2, 1, lastRow > 1 ? lastRow -1 : 1, 7).getValues(); // Ambil semua kolom. Sesuaikan jika perlu
+
+
+        var results = [];
+        for (var i = 0; i < data.length; i++) {
+            if (data[i][5].toLowerCase().includes(query.toLowerCase())) { // Kolom 'query'
+                results.push(data[i]);
+            }
+        }
+
+        cache.put(query, JSON.stringify(results), CACHE_TIME);
+        Logger.log("Menyimpan hasil ke cache untuk query:", query);
+        return results;
+
+    } catch (error) {
+        Logger.log("Error di searchData:", error);
+        sendText(adminBot, "Error saat mencari data: " + error);
+        return []; // Kembalikan array kosong jika terjadi error
+    }
+}
+
+// --- Fungsi untuk Membuat Objek Hasil Inline Query ---
+function createInlineQueryResult(row, index) {
+    var messageId = row[0];
+    var chatId = row[1];
+    var fileId = row[2];
+    var fileType = row[3];
+    var caption = row[4];
+    var sourceChatId = row[6];
+
+    var inlineQueryResult;
+
+    switch (fileType) {
+        case "photo":
+            inlineQueryResult = { type: "photo", id: String(index), photo_file_id: fileId, caption: caption }; break;
+        case "document":
+            inlineQueryResult = { type: "document", id: String(index), document_file_id: fileId, caption: caption }; break;
+        case "video":
+            inlineQueryResult = { type: "video", id: String(index), video_file_id: fileId, caption: caption, title: caption || "Video" }; break;
+        case "audio":
+            inlineQueryResult = { type: "audio", id: String(index), audio_file_id: fileId, caption: caption }; break;
+        case "animation":
+            inlineQueryResult = { type: "animation", id: String(index), gif_file_id: fileId, caption: caption }; break;
+        default:
+            inlineQueryResult = { type: "article", id: String(index), title: caption || "Pesan Teks", input_message_content: { message_text: caption || "Pesan dari channel" }};
+    }
+    return inlineQueryResult;
+}
+
+// --- Fungsi Utilitas (Kirim Teks) ---
+
+function sendText(chatId, text, parseMode) {
+    try {
+        var url = "https://api.telegram.org/bot" + token + "/sendMessage";
+        var payload = {
+            "method": "sendMessage",
+            "chat_id": String(chatId),
+            "text": text,
+            "parse_mode": parseMode || null
+        };
+        var options = {
+            "method": "post",
+            "payload": payload,
+            'muteHttpExceptions': true // Tambahkan ini
+        };
+         var response = UrlFetchApp.fetch(url, options);
+        // Log response (opsional)
+        Logger.log("Response dari sendMessage:", response.getContentText());
+        if(response.getResponseCode() != 200){
+            sendText(adminBot, "Error saat send message: " + response.getContentText()); // Kirim error ke admin
+        }
+
+    } catch (error) {
+        Logger.log("Error di sendText:", error);
+        //sendText(adminBot, "Error saat mengirim pesan: " + error); //Hindari infinite loop
+    }
+}
+
+
+// --- Fungsi untuk Menyimpan channelIds ke Spreadsheet ---
+function saveChannelIdsToSpreadsheet() {
+    try{
+        var ss = SpreadsheetApp.openById(spreadsheetId);
+        var sheet = ss.getSheetByName(SHEET_CHANNEL_NAME);
+        if(!sheet){ //Jika sheet tidak ada, buat
+            sheet = ss.insertSheet(SHEET_CHANNEL_NAME);
+        }
+
+        //Hapus semua isi sheet, lalu tulis ulang (cara sederhana)
+        sheet.clearContents();
+        sheet.appendRow(["channel_id"]); // Header
+        for (var i = 0; i < channelIds.length; i++) {
+            sheet.appendRow([channelIds[i]]);
+        }
+    } catch(error){
+        Logger.log("Error di saveChannelIdsToSpreadsheet:", error);
+        sendText(adminBot, "Error: " + error);
+    }
+}
+
+// --- Fungsi untuk Memuat channelIds dari Spreadsheet ---
+function loadChannelIdsFromSpreadsheet(){
+    try{
+        var ss = SpreadsheetApp.openById(spreadsheetId);
+        var sheet = ss.getSheetByName(SHEET_CHANNEL_NAME);
+        if(!sheet){
+            return; //Jika sheet tidak ada, jangan lakukan apa-apa
+        }
+        var data = sheet.getDataRange().getValues();
+
+        channelIds = []; // Reset channelIds
+        for (var i = 1; i < data.length; i++) { // Mulai dari 1 (lewati header)
+            channelIds.push(parseInt(data[i][0])); // Tambahkan ke array channelIds
+        }
+    } catch(error){
+         Logger.log("Error di loadChannelIdsFromSpreadsheet:", error);
+        sendText(adminBot, "Error: " + error);
+    }
+}
+
+// --- Fungsi Utilitas (getMe, setWebhook, dll. - Tidak Perlu Diubah) ---
+
+function getMe() {
+  var url = "https://api.telegram.org/bot" + token + "/getMe";
+    var response = UrlFetchApp.fetch(url);
+    Logger.log(response.getContentText());
+}
+
+function setWebhook() {
+    var webhookUrl = "YOUR_WEBHOOK_URL"; // Ganti dengan URL webhook (setelah deploy)
+    var url = "https://api.telegram.org/bot" + token + "/setWebhook?url=" + webhookUrl;
+    var response = UrlFetchApp.fetch(url);
+    Logger.log(response.getContentText());
+}
+function getWebhookInfo() {
+  var url = "https://api.telegram.org/bot" + token + "/getWebhookInfo";
+    var response = UrlFetchApp.fetch(url);
+    Logger.log(response.getContentText());
+}
+
+function deleteWebhook() {
+  var url = "https://api.telegram.org/bot" + token + "/deleteWebhook";
+    var response = UrlFetchApp.fetch(url);
+    Logger.log(response.getContentText());
+}
+
+
+//
