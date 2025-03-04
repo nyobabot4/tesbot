@@ -33,7 +33,7 @@ function handleMessage(message) {
     if (text === "/start") { sendStartMessage(chatId, user); }
     else if (text === "/ping") { tg.sendMessage(chatId, "Pong!"); }
     else if (message.document) { processDocument(message); } // Proses dokumen
-    // Tambahkan handler untuk forward (opsional)
+    // Handler untuk forward (HANYA di sini)
     else if (message.forward_from || message.forward_from_chat) {
         processForwardedMessage(message);
     }
@@ -52,7 +52,6 @@ function handleCallbackQuery(callbackQuery) {
 
 // --- Handler Inline Query ---
 function handleInlineQuery(inlineQuery) {
-    // Fungsi ini tidak perlu diubah, sudah untuk umum
     let queryId = inlineQuery.id;
     let queryText = inlineQuery.query;
     let results = searchInSheets(queryText);
@@ -61,13 +60,18 @@ function handleInlineQuery(inlineQuery) {
 
 // --- Handler Chosen Inline Result ---
 function handleChosenInlineResult(chosenResult) {
-    // Fungsi ini tidak perlu diubah, sudah untuk umum
+    // Fungsi ini HANYA bertugas meneruskan file, TIDAK memproses pesan forward.
     let resultId = chosenResult.result_id;
     let userId = chosenResult.from.id;
     let fileId = getFileIdFromSheet(resultId);
 
     if (fileId) {
-        tg.sendDocument(userId, fileId);
+        // Periksa apakah fileId VALID
+        if (fileId !== "" && fileId !== null && fileId !== undefined) {
+            tg.sendDocument(userId, fileId);
+        } else {
+            tg.sendMessage(userId, "Maaf, file tidak ditemukan (fileId kosong).");
+        }
     } else {
         tg.sendMessage(userId, "Maaf, file tidak ditemukan.");
     }
@@ -77,7 +81,8 @@ function handleChosenInlineResult(chosenResult) {
 function getFileIdFromSheet(rowNumber) {
     let ss = SpreadsheetApp.openById(spreadsheetId);
     let sheet = ss.getActiveSheet();
-    let fileId = sheet.getRange(Number(rowNumber) + 1, 6).getValue();
+     // Tidak perlu +1, karena sekarang rowNumber adalah indeks langsung
+    let fileId = sheet.getRange(Number(rowNumber), 6).getValue();
     return fileId;
 }
 
@@ -94,20 +99,16 @@ function sendStartMessage(chatId, user) {
     tg.sendMessage(chatId, text, null, null, null, null, JSON.stringify(keyboard));
 }
 
-// --- Fungsi Pemrosesan Dokumen (Hanya Admin) ---
+// --- Fungsi Pemrosesan Dokumen (Hanya Admin, Multi-file) ---
 function processDocument(message) {
     let chatId = message.chat.id;
     let fileId = message.document.file_id;
     let fileName = message.document.file_name;
+     let mimeType = message.document.mime_type; // Dapatkan MIME type
 
-    // --- VALIDASI ADMIN ---
-    if (message.from.id !== adminBot) {
-        tg.sendMessage(chatId, "Maaf, hanya admin yang bisa mengupload file.");
-        return;
-    }
-    //Validasi hanya di private chat.
-     if (message.chat.type !== "private") {
-        tg.sendMessage(chatId, "Maaf, upload file hanya bisa dilakukan di private chat.");
+    // --- VALIDASI ADMIN dan Private Chat--- (Tidak berubah)
+    if (message.from.id !== adminBot || message.chat.type !== "private") {
+        tg.sendMessage(chatId, "Maaf, hanya admin yang bisa mengupload file di private chat.");
         return;
     }
 
@@ -116,16 +117,74 @@ function processDocument(message) {
 
     try {
         let response = UrlFetchApp.fetch(fileUrl);
-        let content = response.getContentText();
-        let data = parseCSV(content);
-        appendDataToSheet(data, fileId);
-        tg.sendMessage(chatId, `File "${fileName}" berhasil diunggah.`);
+        let content = response.getContentText(); //Hati-hati di sini.
+        let blob = response.getBlob(); //Gunakan ini untuk file binary
+
+         // --- PENANGANAN BERDASARKAN JENIS FILE ---
+        if (mimeType === "text/csv") {
+            // Proses file CSV
+            let data = parseCSV(content);
+            appendDataToSheet(data, fileId);
+            tg.sendMessage(chatId, `File CSV "${fileName}" berhasil diunggah.`);
+
+        } else if (mimeType === "application/pdf") {
+            // Proses file PDF (contoh: simpan nama dan URL saja)
+            let data = [[fileName, "PDF Document", fileUrl, "", "", fileId]];
+             appendDataToSheet(data, fileId); //Simpan data tanpa di parsing
+            tg.sendMessage(chatId, `File PDF "${fileName}" berhasil diunggah.`);
+
+        } else if (mimeType === "application/vnd.ms-excel" || mimeType === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") {
+            //Proses File Excel
+             let data = processExcelFile(blob); //Implementasikan fungsi ini.
+             appendDataToSheet(data,fileId);
+              tg.sendMessage(chatId, `File Excel "${fileName}" berhasil diunggah.`);
+
+        } else if (mimeType.startsWith("image/")) { //startsWith, untuk semua image
+            // Proses gambar (contoh: simpan nama dan URL)
+            let data = [[fileName, "Image", fileUrl, "", "", fileId]];
+            appendDataToSheet(data,fileId);
+            tg.sendMessage(chatId, `Gambar "${fileName}" berhasil diunggah.`);
+
+        } else if (mimeType.startsWith("video/")) {
+            // Proses video (contoh: simpan nama dan URL)
+            let video = message.document;
+            let fileName = video.file_name || "video.mp4"; // Beri nama default jika tidak ada
+            let fileSize = video.file_size; // Ukuran file (dalam bytes)
+
+            // Contoh: Simpan nama, URL, ukuran
+            let data = [[fileName, "Video", fileUrl, `Size: ${fileSize} bytes`, "", fileId]];
+
+            // Periksa Ukuran
+            const MAX_BOT_API_SIZE = 50 * 1024 * 1024; // 50 MB in bytes
+            if(fileSize > MAX_BOT_API_SIZE){
+              tg.sendMessage(chatId, `File terlalu besar, maksimal ${MAX_BOT_API_SIZE / 1024 / 1024} MB`);
+              return; //Hentikan eksekusi
+            }
+
+            appendDataToSheet(data, fileId);
+            tg.sendMessage(chatId, `Video "${fileName}" berhasil diunggah.`);
+
+        }else {
+            // Jenis file lain (tidak didukung, atau simpan metadata saja)
+             let data = [[fileName, mimeType, fileUrl, "", "", fileId]]; //Simpan MimeType
+              appendDataToSheet(data,fileId);
+            tg.sendMessage(chatId, `File "${fileName}" (jenis: ${mimeType}) berhasil diunggah. Pemrosesan khusus belum diimplementasikan.`);
+        }
 
     } catch (error) {
         tg.sendMessage(chatId, `Terjadi kesalahan: ${error}`);
         if (debug) { tg.sendMessage(adminBot, `Error processDocument: ${error.stack}`); }
     }
 }
+
+//Contoh fungsi untuk memproses excel, install library jika belum
+function processExcelFile(blob){
+  //Gunakan library SpreadsheetApp
+  let spreadsheet = SpreadsheetApp.open(blob);
+  let sheet = spreadsheet.getActiveSheet(); // Ambil sheet pertama, atau sesuaikan
+  return sheet.getDataRange().getValues();
+}
+
 // --- Fungsi untuk memproses pesan yang di-forward (opsional) ---
 function processForwardedMessage(message) {
     let chatId = message.chat.id;
@@ -173,34 +232,47 @@ function appendDataToSheet(data, fileId) {
     let sheet = ss.getActiveSheet();
     for(let i = 0; i<data.length; i++){
       let rowData = data[i];
-      rowData.push(fileId);
+      rowData.push(fileId); // Tambahkan fileId ke setiap baris
       sheet.appendRow(rowData);
     }
 }
 
-// --- Fungsi Pencarian di Sheet ---
+// --- Fungsi Pencarian di Sheet (dengan 'dummy' result) ---
 function searchInSheets(query) {
     let ss = SpreadsheetApp.openById(spreadsheetId);
     let sheet = ss.getActiveSheet();
     let data = sheet.getDataRange().getValues();
     let results = [];
+    let hasResults = false; // Flag untuk melacak apakah ada hasil
 
     for (let i = 1; i < data.length; i++) { // Mulai dari 1, abaikan header
-        //Cari di kolom 0, 1 dan 3
-        if (String(data[i][0]).toLowerCase().includes(query.toLowerCase()) ||
-            String(data[i][1]).toLowerCase().includes(query.toLowerCase()) ||
-            String(data[i][3]).toLowerCase().includes(query.toLowerCase()))
+        // Periksa apakah query cocok dengan salah satu kolom yang relevan.
+        if (String(data[i][0]).toLowerCase().includes(query.toLowerCase()) ||  // Nama File
+            String(data[i][1]).toLowerCase().includes(query.toLowerCase()) ||  // Deskripsi/Keterangan
+            String(data[i][3]).toLowerCase().includes(query.toLowerCase()))    // Keywords (jika ada)
         {
-            let fileUrl = data[i][2] || "";
+            let fileUrl = data[i][2] || "";  // URL (jika ada)
             results.push({
                 type: "document",
-                id: String(i),
-                title: data[i][0],
-                document_file_id: data[i][5],
-                caption: data[i][0] + (fileUrl ? "\n" + fileUrl : ""),
-                description: data[i][1],
+                id: String(i),  // Gunakan nomor baris sebagai ID (dimulai dari 1)
+                title: data[i][0],  // Judul: Nama File
+                document_file_id: data[i][5],  // File ID
+                caption: data[i][0] + (fileUrl ? "\n" + fileUrl : ""),  // Caption: Nama File + URL
+                description: data[i][1],  // Deskripsi: Keterangan (bisa dari kolom deskripsi atau jenis file)
             });
+            hasResults = true;
         }
     }
+
+    // Jika tidak ada hasil yang cocok, tambahkan satu hasil "dummy".
+    if (!hasResults) {
+        results.push({
+            type: "article",  // Gunakan tipe "article" untuk pesan teks
+            id: "no_results",
+            title: "Tidak ada hasil",
+            input_message_content: { message_text: "Maaf, tidak ada berkas yang cocok dengan pencarian Anda." },
+        });
+    }
+
     return results;
 }
