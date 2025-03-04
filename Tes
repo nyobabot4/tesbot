@@ -1,11 +1,11 @@
 // --- Konfigurasi ---
-var token = "7849305390:AAHTEPmbFVwk--omKJsTP4H5j6Xv18SGQU0";          // Ganti dengan token bot Anda
+var token = "7849305390:AAEH2H2L4XPKL8lJwEiArlqIMfXsprnQ30Q";          // Ganti dengan token bot Anda
 const adminBot = 2109541199;        // Ganti dengan ID Telegram Anda
 const spreadsheetId = "10TupgRfroPas2SjNNY19Q4uB82AYGUVwIIisBxb9Mgg"; // Ganti dengan ID Google Sheet Anda
 const debug = false;
 
 // --- Inisialisasi Library Telegram ---
-const tg = new telegram.daftar(token);
+const tg = new telegram.daftar(token); // Ini memanggil library telegram.gs
 
 // --- Fungsi Telegram (Tidak Berubah) ---
 function getMe() { let me = tg.getMe(); return Logger.log(me); }
@@ -204,7 +204,3 @@ function searchInSheets(query) {
     }
     return results;
 }
-
-//https://script.google.com/macros/s/AKfycbx1CVzve-Amd2IItXwXhRw5Bxc2dxkiGjrYGl3PgzV6FqDFODCrwfNdJkNRFwrvfdSc/exec
-
-//https://api.telegram.org/bot7849305390:AAHTEPmbFVwk--omKJsTP4H5j6Xv18SGQU0/setwebhook?url= 
