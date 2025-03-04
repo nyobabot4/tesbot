@@ -1,41 +1,22 @@
 // -- WAJIB DIISI --
 var token = "7849305390:AAEH2H2L4XPKL8lJwEiArlqIMfXsprnQ30Q"; // Ganti dengan token bot Anda
-const adminBot = 123456789; // Ganti dengan ID Telegram Anda
-const spreadsheetId = "10TupgRfroPas2SjNNY19Q4uB82AYGUVwIIisBxb9Mgg"; // Ganti dengan ID Google Sheet Anda
-const sheetName = "sheet1"; // Ganti dengan nama sheet yang digunakan (opsional)
+const adminBot = 123456789; // Ganti dengan ID Telegram Anda (gunakan @userinfobot)
+const spreadsheetId = "10TupgRfroPas2SjNNY19Q4uB82AYGUVwIIisBxb9Mgg"; // Ganti dengan ID Google Sheet
+const sheetName = "Data"; // Ganti dengan nama sheet (jika beda)
 
-// -- KONFIGURASI --
-const debug = false; // Set ke true untuk debugging (kirim struktur JSON ke admin)
+// -- LIBRARY (ASUMSI SUDAH DITAMBAHKAN) --
 const tg = new telegram.daftar(token);
 
 // -- FUNGSI UTILITY --
-
 function getSheet() {
     return SpreadsheetApp.openById(spreadsheetId).getSheetByName(sheetName);
 }
 
-function logToSheet(data) { // Fungsi untuk log ke sheet (debugging)
-  const sheet = getSheet();
-  sheet.appendRow([new Date(), JSON.stringify(data)]);
-}
-
-
-// -- FUNGSI TELEGRAM (opsional, dari kode Anda) --
-
-function getMe() {
-    let me = tg.getMe();
-    return Logger.log(me);
-}
-
+// -- WEBHOOK (TETAP) --
 function setWebhook() {
-    var url = ScriptApp.getService().getUrl(); // Dapatkan URL webhook otomatis
+    var url = ScriptApp.getService().getUrl();
     var r = tg.setWebhook(url);
     return Logger.log(r);
-}
-
-function getWebhookInfo() {
-    let hasil = tg.getWebhookInfo();
-    return Logger.log(hasil);
 }
 
 function deleteWebhook() {
@@ -43,26 +24,34 @@ function deleteWebhook() {
     return Logger.log(hasil);
 }
 
-// --- FUNGSI UTAMA BOT ---
+
+// -- FUNGSI UTAMA (DIPERBARUI) --
 
 function doPost(e) {
     try {
         const update = JSON.parse(e.postData.contents);
 
-        if (debug) {
-            tg.sendMessage(adminBot, JSON.stringify(update));  // Kirim data mentah ke admin
-        }
-       // logToSheet(update); // opsi lain log
+        // LOG UPDATE (untuk debugging)
+        console.log("Update Received:", JSON.stringify(update, null, 2));
 
         if (update.message) {
             handleMessage(update.message);
         } else if (update.inline_query) {
             handleInlineQuery(update.inline_query);
+        }  else if (update.callback_query) { // Tambahkan penanganan callback query
+            handleCallbackQuery(update.callback_query);
         }
 
     } catch (error) {
-      tg.sendMessage(adminBot, "Error: " + error.toString());
-      logToSheet(error); // opsi lain untuk log error
+        console.error("Error in doPost:", error);  // Log error dengan console.error
+        // Kirim error ke admin (jika memungkinkan)
+        if (typeof adminBot !== 'undefined' && adminBot) { //cek adminBot ada dan tidak 0
+            try {
+              tg.sendMessage(adminBot, "Error in doPost: " + error.toString());
+            } catch (sendError) {
+                console.error("Error sending error message:", sendError);
+            }
+        }
     }
 }
 
@@ -70,139 +59,152 @@ function handleMessage(message) {
     const chatId = message.chat.id;
     const text = message.text;
 
+    // LOG CHAT ID (untuk debugging)
+    console.log("Chat ID:", chatId);
+
+    // --- PENANGANAN PESAN ---
+
+    // 1.  /start (dengan tombol inline)
     if (text === "/start") {
-        // Buat keyboard inline
         const keyboard = [
             [{ text: "🔍 Cari File", switch_inline_query_current_chat: "" }],
             [{ text: "ℹ️ Bantuan", callback_data: "help" }],
         ];
         const replyMarkup = { inline_keyboard: keyboard };
 
-        tg.sendMessage(chatId, "Selamat datang!  Gunakan tombol di bawah untuk mencari file atau mendapatkan bantuan.", { reply_markup: replyMarkup });
+        tg.sendMessage(chatId, "Selamat datang! Gunakan tombol di bawah.", { reply_markup: replyMarkup });
+        return; // Penting: keluar dari fungsi setelah menangani /start
+    }
 
-    } else if (message.forward_from && message.forward_from.id === adminBot) {
-        // Admin meneruskan pesan
-        saveForwardedMessage(message);
-        tg.sendMessage(chatId, "Pesan tersimpan!");
+
+    // 2. Admin meneruskan pesan
+    if (message.forward_from && message.forward_from.id === adminBot) {
+          console.log("Pesan terusan dari admin diterima.");
+          saveForwardedMessage(message);
+          tg.sendMessage(chatId, "Pesan terusan disimpan!");
+          return;
     }
-     else if (message.document && chatId === adminBot) { // Admin upload file
-      saveUploadedFile(message);
-      tg.sendMessage(chatId, "File berhasil disimpan!");
+    // 3. Admin Upload file
+      if (message.document && chatId === adminBot) {
+        console.log("File diterima dari admin.");
+        saveUploadedFile(message);
+        tg.sendMessage(chatId, "File disimpan!");
+        return;
     }
-    else {
-        // Pesan lain (tidak ditangani)
-        tg.sendMessage(chatId, "Perintah tidak dikenali.");
+
+
+    // 4. Pesan Teks Biasa (dari siapa saja) - Contoh Sederhana
+      if (text) {  //cek text ada atau tidak
+        console.log("Pesan teks biasa diterima:", text);
+        tg.sendMessage(chatId, "Anda mengirim: " + text); // Balas dengan echo
+        return;
     }
+
+    // Jika tidak ada yang cocok
+    tg.sendMessage(chatId, "Perintah tidak dikenali.");
 }
+
+
 
 function handleInlineQuery(inlineQuery) {
     const queryId = inlineQuery.id;
     const queryText = inlineQuery.query.toLowerCase();
-    const results = searchFiles(queryText); // Cari file berdasarkan query
-    tg.answerInlineQuery(queryId, results, { cache_time: 10 });  // cache_time bisa disesuaikan
+    const results = searchFiles(queryText);
+    tg.answerInlineQuery(queryId, results, { cache_time: 10 });
 }
 
-// --- FUNGSI PENYIMPANAN DATA ---
+function handleCallbackQuery(callbackQuery) {
+    const queryId = callbackQuery.id;
+    const data = callbackQuery.data;
+    const chatId = callbackQuery.message.chat.id; // chatId ada di message
+
+     console.log("Callback query received. Data:", data, "Chat ID:", chatId);
+
+    if (data === "help") {
+        tg.answerCallbackQuery(queryId, { text: "Ini adalah pesan bantuan!", show_alert: true });
+    }
+}
+
+
+
+// --- FUNGSI PENYIMPANAN (TETAP, HANYA SEDIKIT PERUBAHAN) ---
+
 function saveUploadedFile(message) {
     const sheet = getSheet();
     const fileId = message.document.file_id;
     const fileName = message.document.file_name;
+      console.log("Saving file:", fileName, "with ID:", fileId); // Log
     sheet.appendRow([new Date(), "file", fileName, fileId, message.chat.id]);
 }
 
 function saveForwardedMessage(message) {
     const sheet = getSheet();
-      let fileId = '';
+    let fileId = '';
     let fileName = '';
 
     if (message.document) {
         fileId = message.document.file_id;
         fileName = message.document.file_name;
-    } else if(message.photo){ //untuk photo, ambil file_id yang paling besar (kualitas terbaik)
+    } else if (message.photo) {
         fileId = message.photo[message.photo.length - 1].file_id;
         fileName = "photo_" + fileId;
-    } else if(message.video){
+    } else if (message.video) {
         fileId = message.video.file_id;
         fileName = message.video.file_name || "video_" + fileId;
+    } else if (message.text) {
+        fileName = "text";
     }
-     else if (message.text) {
-        fileName = "text"; // atau sesuaikan dengan jenis pesan lain
-    }
-    // Tambahkan jenis pesan/media lain sesuai kebutuhan
-
-    sheet.appendRow([new Date(), "forwarded", fileName , fileId, message.chat.id]);
+     console.log("Saving forwarded message:", fileName, "with ID:", fileId); //log
+    sheet.appendRow([new Date(), "forwarded", fileName, fileId, message.chat.id]);
 }
 
-// --- FUNGSI PENCARIAN ---
+// --- FUNGSI PENCARIAN (TETAP) ---
 
 function searchFiles(query) {
     const sheet = getSheet();
     const data = sheet.getDataRange().getValues();
     const results = [];
 
-    // Header diabaikan (baris pertama)
-    for (let i = 1; i < data.length; i++) {
+    for (let i = 1; i < data.length; i++) { // Mulai dari 1 (abaikan header)
         const row = data[i];
-        const type = row[1]; // "file" atau "forwarded"
+        const type = row[1];
         const fileName = row[2].toLowerCase();
         const fileId = row[3];
 
         if (fileName.includes(query)) {
-          let result = {};
-            if(type === "file" || (type === "forwarded" && fileName.startsWith("photo_")) ){
-               result = {
+            let result = {};
+
+            if (type === "file" || (type === "forwarded" && fileName.startsWith("photo_"))) {
+                result = {
                     type: "photo",
-                    id: Utilities.base64Encode(fileId), // ID unik untuk hasil inline
+                    id: Utilities.base64Encode(fileId),
                     photo_file_id: fileId,
                     title: fileName
                 };
-            } else if (type === "forwarded" && fileName.startsWith("video_")){
-                 result = {
+            } else if (type === "forwarded" && fileName.startsWith("video_")) {
+                result = {
                     type: "video",
                     id: Utilities.base64Encode(fileId),
                     video_file_id: fileId,
                     title: fileName
                 };
-            }
-              else if(type === "forwarded" && fileName){ //untuk text dan file
+            } else if (type === "forwarded" && fileName) {
                 result = {
-                  type: "article", // Gunakan article untuk pesan teks
-                  id: Utilities.base64Encode(fileId + i),  //ID harus unik, jadi tambahkan index baris
-                  title: fileName,
-                  input_message_content: {
-                    message_text: `File: ${fileName}\nFile ID: ${fileId}`,
-
-                  }
+                    type: "article",
+                    id: Utilities.base64Encode(fileId + i), // ID unik
+                    title: fileName,
+                    input_message_content: {
+                        message_text: `File: ${fileName}\nFile ID: ${fileId}`,
+                    }
                 };
-                //jika ingin mengirimkan file dari forwarded text
-                /*
-                input_message_content: {
-                    message_text: `/get ${fileId}`,
-                  }
-                */
-              }
-
-
-            if(Object.keys(result).length > 0) { //cek result kosong atau tidak
-              results.push(result);
             }
-            if(results.length >= 50) break; // Batasi hasil (maks 50)
+
+            if (Object.keys(result).length > 0) {
+                results.push(result);
+            }
+            if (results.length >= 50) break; // Batasi hasil
         }
     }
-
     return results;
 }
 
-
-//--- Callback Query Handler (untuk tombol Bantuan, dll.) --
-function handleCallbackQuery(callbackQuery) {
-  const queryId = callbackQuery.id;
-  const data = callbackQuery.data;
-  const chatId = callbackQuery.message.chat.id;
-
-  if (data === "help") {
-    tg.answerCallbackQuery(queryId, { text: "Ini adalah pesan bantuan.  Anda bisa menambahkan instruksi penggunaan bot di sini.", show_alert: true });
-    // Atau, kirim pesan terpisah
-    // tg.sendMessage(chatId, "Ini pesan bantuan...");
-  }
-}
