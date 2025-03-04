@@ -38,6 +38,7 @@ function handleMessage(message) {
         processForwardedMessage(message);
     }
 }
+
 // --- Handler Callback Query (Tombol) ---
 function handleCallbackQuery(callbackQuery) {
     let chatId = callbackQuery.message.chat.id;
@@ -99,26 +100,58 @@ function sendStartMessage(chatId, user) {
     tg.sendMessage(chatId, text, null, null, null, null, JSON.stringify(keyboard));
 }
 
+// --- Fungsi untuk memproses pesan yang di-forward (opsional) ---
+function processForwardedMessage(message) {
+    let chatId = message.chat.id;
+
+    // --- VALIDASI ADMIN dan Private Chat---
+    if (message.from.id !== adminBot || message.chat.type !== "private") {
+        tg.sendMessage(chatId, "Maaf, hanya admin yang bisa menambahkan data di private chat.");
+        return;
+    }
+  // Cek apakah pesan yang di-forward mengandung dokumen
+    if (message.forward_from_chat && message.document) {
+        processDocument(message); // Gunakan fungsi yang sama untuk memproses dokumen
+    } else if (message.forward_from_chat && message.photo) {
+          tg.sendMessage(chatId, "Maaf, format pesan photo yang di-forward tidak didukung.");
+    }
+    else if (message.forward_from && message.text){
+      //forward dari user, mengandung text
+       // Format data (misalnya, [nama_file, deskripsi, url, keywords, kategori, file_id])
+        let data = [message.text, "Forwarded message", "", "", "", ""]; // Sesuaikan
+        appendDataToSheet(data, ""); // fileId kosong karena bukan dari upload file
+         tg.sendMessage(chatId, "Pesan berhasil ditambahkan ke database.");
+
+    }
+      else {
+        tg.sendMessage(chatId, "Maaf, format pesan yang di-forward tidak didukung.");
+    }
+}
+
 // --- Fungsi Pemrosesan Dokumen (Hanya Admin, Multi-file) ---
 function processDocument(message) {
     let chatId = message.chat.id;
-    let fileId = message.document.file_id;
-    let fileName = message.document.file_name;
-     let mimeType = message.document.mime_type; // Dapatkan MIME type
+     // Perubahan: Ambil document dari message, atau dari forwarded_message
+    let document = message.document;
+    let fileId = document.file_id;
+    let fileName = document.file_name;
+    let mimeType = document.mime_type;
 
-    // --- VALIDASI ADMIN dan Private Chat--- (Tidak berubah)
+    // --- VALIDASI ADMIN dan Private Chat (Tidak Berubah)---
     if (message.from.id !== adminBot || message.chat.type !== "private") {
         tg.sendMessage(chatId, "Maaf, hanya admin yang bisa mengupload file di private chat.");
         return;
     }
 
+
     let file = tg.getFile(fileId);
     let fileUrl = `https://api.telegram.org/file/bot${token}/${file.file_path}`;
 
+
     try {
         let response = UrlFetchApp.fetch(fileUrl);
-        let content = response.getContentText(); //Hati-hati di sini.
-        let blob = response.getBlob(); //Gunakan ini untuk file binary
+        let content = response.getContentText(); //Hati-hati di sini. Cek mimeType dulu
+        let blob = response.getBlob();
 
          // --- PENANGANAN BERDASARKAN JENIS FILE ---
         if (mimeType === "text/csv") {
@@ -128,47 +161,41 @@ function processDocument(message) {
             tg.sendMessage(chatId, `File CSV "${fileName}" berhasil diunggah.`);
 
         } else if (mimeType === "application/pdf") {
-            // Proses file PDF (contoh: simpan nama dan URL saja)
+            // Proses file PDF
             let data = [[fileName, "PDF Document", fileUrl, "", "", fileId]];
-             appendDataToSheet(data, fileId); //Simpan data tanpa di parsing
+             appendDataToSheet(data, fileId);
             tg.sendMessage(chatId, `File PDF "${fileName}" berhasil diunggah.`);
 
         } else if (mimeType === "application/vnd.ms-excel" || mimeType === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") {
             //Proses File Excel
-             let data = processExcelFile(blob); //Implementasikan fungsi ini.
+            let data = processExcelFile(blob); //Harus implementasikan
              appendDataToSheet(data,fileId);
               tg.sendMessage(chatId, `File Excel "${fileName}" berhasil diunggah.`);
 
-        } else if (mimeType.startsWith("image/")) { //startsWith, untuk semua image
-            // Proses gambar (contoh: simpan nama dan URL)
-            let data = [[fileName, "Image", fileUrl, "", "", fileId]];
-            appendDataToSheet(data,fileId);
+        }else if (mimeType.startsWith("image/")) {
+            // Handle gambar
+             let data = [[fileName, "Image", fileUrl, "", "", fileId]];
+            appendDataToSheet(data, fileId);
             tg.sendMessage(chatId, `Gambar "${fileName}" berhasil diunggah.`);
 
         } else if (mimeType.startsWith("video/")) {
-            // Proses video (contoh: simpan nama dan URL)
-            let video = message.document;
-            let fileName = video.file_name || "video.mp4"; // Beri nama default jika tidak ada
-            let fileSize = video.file_size; // Ukuran file (dalam bytes)
-
-            // Contoh: Simpan nama, URL, ukuran
-            let data = [[fileName, "Video", fileUrl, `Size: ${fileSize} bytes`, "", fileId]];
-
-            // Periksa Ukuran
+            // Handle video
+              let fileSize = document.file_size;
+               // Periksa Ukuran
             const MAX_BOT_API_SIZE = 50 * 1024 * 1024; // 50 MB in bytes
             if(fileSize > MAX_BOT_API_SIZE){
               tg.sendMessage(chatId, `File terlalu besar, maksimal ${MAX_BOT_API_SIZE / 1024 / 1024} MB`);
               return; //Hentikan eksekusi
             }
-
+             let data = [[fileName, "Video", fileUrl, `Size: ${fileSize} bytes`, "", fileId]];
             appendDataToSheet(data, fileId);
             tg.sendMessage(chatId, `Video "${fileName}" berhasil diunggah.`);
 
         }else {
-            // Jenis file lain (tidak didukung, atau simpan metadata saja)
-             let data = [[fileName, mimeType, fileUrl, "", "", fileId]]; //Simpan MimeType
+            // Jenis file lain
+             let data = [[fileName, mimeType, fileUrl, "", "", fileId]];
               appendDataToSheet(data,fileId);
-            tg.sendMessage(chatId, `File "${fileName}" (jenis: ${mimeType}) berhasil diunggah. Pemrosesan khusus belum diimplementasikan.`);
+            tg.sendMessage(chatId, `File "${fileName}" (jenis: ${mimeType}) berhasil diunggah.`);
         }
 
     } catch (error) {
@@ -183,32 +210,6 @@ function processExcelFile(blob){
   let spreadsheet = SpreadsheetApp.open(blob);
   let sheet = spreadsheet.getActiveSheet(); // Ambil sheet pertama, atau sesuaikan
   return sheet.getDataRange().getValues();
-}
-
-// --- Fungsi untuk memproses pesan yang di-forward (opsional) ---
-function processForwardedMessage(message) {
-    let chatId = message.chat.id;
-
-    // --- VALIDASI ADMIN ---
-    if (message.from.id !== adminBot) {
-        tg.sendMessage(chatId, "Maaf, hanya admin yang bisa menambahkan data.");
-        return;
-    }
-    //Validasi hanya di private chat
-    if (message.chat.type !== "private") {
-        tg.sendMessage(chatId, "Maaf, upload file hanya bisa dilakukan di private chat.");
-        return;
-    }
-
-    // Contoh: Jika pesan yang di-forward mengandung teks, simpan teks itu ke Sheet
-    if (message.text) {
-        // Format data (misalnya, [nama_file, deskripsi, url, keywords, kategori, file_id])
-        let data = [message.text, "Forwarded message", "", "", "", ""]; // Sesuaikan
-        appendDataToSheet(data, ""); // fileId kosong karena bukan dari upload file
-         tg.sendMessage(chatId, "Pesan berhasil ditambahkan ke database.");
-    } else {
-         tg.sendMessage(chatId, "Maaf, format pesan yang di-forward tidak didukung.");
-    }
 }
 
 // --- Fungsi Parsing CSV (Lebih Robust) ---
