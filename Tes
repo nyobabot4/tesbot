@@ -204,3 +204,7 @@ function searchInSheets(query) {
     }
     return results;
 }
+
+//https://script.google.com/macros/s/AKfycbx1CVzve-Amd2IItXwXhRw5Bxc2dxkiGjrYGl3PgzV6FqDFODCrwfNdJkNRFwrvfdSc/exec
+
+//https://api.telegram.org/bot7849305390:AAHTEPmbFVwk--omKJsTP4H5j6Xv18SGQU0/setwebhook?url= 
